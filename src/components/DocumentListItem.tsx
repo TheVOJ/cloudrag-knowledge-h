@@ -2,17 +2,19 @@ import { Document } from '@/lib/types'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { FileText, Trash, Link } from '@phosphor-icons/react'
+import { FileText, Trash, Link, Eye, Pencil } from '@phosphor-icons/react'
 import { formatDate, getSourceIcon, getSourceLabel, extractDomain } from '@/lib/helpers'
 
 interface DocumentListItemProps {
   document: Document
   onDelete: (id: string) => void
+  onView: (document: Document) => void
+  onEdit: (document: Document) => void
 }
 
-export function DocumentListItem({ document, onDelete }: DocumentListItemProps) {
+export function DocumentListItem({ document, onDelete, onView, onEdit }: DocumentListItemProps) {
   return (
-    <Card className="p-4">
+    <Card className="p-4 hover:bg-accent/5 transition-colors">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3 flex-1 min-w-0">
           <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
@@ -49,14 +51,32 @@ export function DocumentListItem({ document, onDelete }: DocumentListItemProps) 
           </div>
         </div>
         
-        <Button
-          variant="ghost"
-          size="icon"
-          className="hover:bg-destructive/10 hover:text-destructive flex-shrink-0"
-          onClick={() => onDelete(document.id)}
-        >
-          <Trash size={16} />
-        </Button>
+        <div className="flex gap-1 flex-shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hover:bg-accent/10"
+            onClick={() => onView(document)}
+          >
+            <Eye size={16} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hover:bg-primary/10"
+            onClick={() => onEdit(document)}
+          >
+            <Pencil size={16} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => onDelete(document.id)}
+          >
+            <Trash size={16} />
+          </Button>
+        </div>
       </div>
     </Card>
   )

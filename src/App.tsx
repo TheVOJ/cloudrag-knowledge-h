@@ -8,6 +8,7 @@ import { KnowledgeBaseCard } from '@/components/KnowledgeBaseCard'
 import { CreateKnowledgeBaseDialog } from '@/components/CreateKnowledgeBaseDialog'
 import { AddContentDialog } from '@/components/AddContentDialog'
 import { DocumentListItem } from '@/components/DocumentListItem'
+import { DocumentViewerDialog } from '@/components/DocumentViewerDialog'
 import { QueryInterface } from '@/components/QueryInterface'
 import { QueryHistory } from '@/components/QueryHistory'
 import { Database, Plus, ArrowLeft, ChartBar, MagnifyingGlass, FileText } from '@phosphor-icons/react'
@@ -25,6 +26,8 @@ function App() {
   const [selectedKB, setSelectedKB] = useState<KnowledgeBase | null>(null)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showAddContentDialog, setShowAddContentDialog] = useState(false)
+  const [viewingDocument, setViewingDocument] = useState<Document | null>(null)
+  const [showDocumentViewer, setShowDocumentViewer] = useState(false)
   
   const kbs = knowledgeBases || []
   const docs = documents || []
@@ -126,6 +129,34 @@ function App() {
     }
     
     toast.success('Document removed')
+  }
+  
+  const handleViewDocument = (document: Document) => {
+    setViewingDocument(document)
+    setShowDocumentViewer(true)
+  }
+  
+  const handleEditDocument = (document: Document) => {
+    setViewingDocument(document)
+    setShowDocumentViewer(true)
+  }
+  
+  const handleSaveDocument = (id: string, title: string, content: string) => {
+    setDocuments((current) =>
+      (current || []).map(doc =>
+        doc.id === id
+          ? { ...doc, title, content, metadata: { ...doc.metadata, lastModified: Date.now() } }
+          : doc
+      )
+    )
+    
+    setViewingDocument((current) =>
+      current && current.id === id
+        ? { ...current, title, content, metadata: { ...current.metadata, lastModified: Date.now() } }
+        : current
+    )
+    
+    toast.success('Document updated successfully')
   }
   
   const handleQuery = (query: string, response: string, sources: string[]) => {
@@ -292,6 +323,8 @@ function App() {
                     <DocumentListItem
                       document={doc}
                       onDelete={handleDeleteDocument}
+                      onView={handleViewDocument}
+                      onEdit={handleEditDocument}
                     />
                   </motion.div>
                 ))}
@@ -369,6 +402,13 @@ function App() {
         open={showAddContentDialog}
         onOpenChange={setShowAddContentDialog}
         onAdd={handleAddContent}
+      />
+      
+      <DocumentViewerDialog
+        document={viewingDocument}
+        open={showDocumentViewer}
+        onOpenChange={setShowDocumentViewer}
+        onSave={handleSaveDocument}
       />
     </div>
   )
