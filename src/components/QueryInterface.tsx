@@ -4,21 +4,29 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { MagnifyingGlass, Sparkle } from '@phosphor-icons/react'
+import { MagnifyingGlass, Sparkle, Lightning } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
+import { AzureSearchService, SearchResult } from '@/lib/azure-search'
+import { AzureSearchSettings } from '@/lib/types'
 
 interface QueryInterfaceProps {
   knowledgeBaseName: string
   documents: Array<{ id: string; title: string; content: string }>
-  onQuery: (query: string, response: string, sources: string[]) => void
+  onQuery: (query: string, response: string, sources: string[], searchMethod: 'simulated' | 'azure') => void
+  azureSettings?: AzureSearchSettings
+  indexName?: string
 }
 
-export function QueryInterface({ knowledgeBaseName, documents, onQuery }: QueryInterfaceProps) {
+export function QueryInterface({ knowledgeBaseName, documents, onQuery, azureSettings, indexName }: QueryInterfaceProps) {
   const [query, setQuery] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [response, setResponse] = useState('')
   const [sources, setSources] = useState<string[]>([])
   const [displayedText, setDisplayedText] = useState('')
+  const [searchMethod, setSearchMethod] = useState<'simulated' | 'azure'>('simulated')
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  
+  const isAzureEnabled = azureSettings?.enabled && azureSettings.endpoint && azureSettings.apiKey && indexName
   
   useEffect(() => {
     if (!response) {
@@ -39,20 +47,67 @@ export function QueryInterface({ knowledgeBaseName, documents, onQuery }: QueryI
     return () => clearInterval(interval)
   }, [response])
   
-  const handleSearch = async () => {
+  const handleAzureSearch = async () => {
+    if (!isAzureEnabled || !query.trim()) return
+    
+    setIsLoading(true)
+    setResponse('')
+    setSources([])
+    setDisplayedText('')
+    setSearchResults([])
+    
+    try {
+      const service = new AzureSearchService({
+        endpoint: azureSettings.endpoint,
+        apiKey: azureSettings.apiKey,
+        indexName: indexName!,
+      })
+      
+      const results = await service.search(query, 5)
+      setSearchResults(results)
+      
+      const context = results
+        .map((result) => `${result.title} (relevance: ${result.score.toFixed(2)}): ${result.content.slice(0, 500)}`)
+        .join('\n\n')
+      
+      const prompt = `You are a helpful AI assistant with access to a knowledge base called "${knowledgeBaseName}". 
+
+Based on the following context from Azure AI Search results, answer the user's question. Be concise, accurate, and cite which documents you're referencing.
+
+Context:
+${context}
+
+User Question: ${query}
+
+Provide a helpful answer based on the context above. If the context doesn't contain relevant information, say so.`
+      
+      const aiResponse = await window.spark.llm(prompt, 'gpt-4o-mini')
+      setResponse(aiResponse)
+      setSources(results.map((r) => r.title))
+      onQuery(query, aiResponse, results.map((r) => r.title), 'azure')
+    } catch (error) {
+      setResponse('Error with Azure Search: ' + (error instanceof Error ? error.message : 'Unknown error'))
+      setSources([])
+    }
+    
+    setIsLoading(false)
+  }
+  
+  const handleSimulatedSearch = async () => {
     if (!query.trim()) return
     
     setIsLoading(true)
     setResponse('')
     setSources([])
     setDisplayedText('')
+    setSearchResults([])
     
     await new Promise(resolve => setTimeout(resolve, 800))
     
     const relevantDocs = documents.slice(0, 3)
     const context = relevantDocs.map(doc => `${doc.title}: ${doc.content}`).join('\n\n')
     
-    const promptText = `You are a helpful AI assistant with access to a knowledge base called "${knowledgeBaseName}". 
+    const prompt = `You are a helpful AI assistant with access to a knowledge base called "${knowledgeBaseName}". 
 
 Based on the following context from the knowledge base, answer the user's question. Be concise, accurate, and cite which documents you're referencing.
 
@@ -64,16 +119,26 @@ User Question: ${query}
 Provide a helpful answer based on the context above. If the context doesn't contain relevant information, say so.`
     
     try {
-      const aiResponse = await window.spark.llm(promptText, 'gpt-4o-mini')
+      const aiResponse = await window.spark.llm(prompt, 'gpt-4o-mini')
       setResponse(aiResponse)
       setSources(relevantDocs.map(doc => doc.title))
-      onQuery(query, aiResponse, relevantDocs.map(doc => doc.title))
+      onQuery(query, aiResponse, relevantDocs.map(doc => doc.title), 'simulated')
     } catch (error) {
       setResponse('Sorry, I encountered an error while processing your query. Please try again.')
       setSources([])
     }
     
     setIsLoading(false)
+  }
+  
+  const handleSearch = async () => {
+    if (isAzureEnabled) {
+      setSearchMethod('azure')
+      await handleAzureSearch()
+    } else {
+      setSearchMethod('simulated')
+      await handleSimulatedSearch()
+    }
   }
   
   return (
@@ -94,11 +159,21 @@ Provide a helpful answer based on the context above. If the context doesn't cont
               disabled={isLoading}
             />
           </div>
-          <Button onClick={handleSearch} disabled={!query.trim() || isLoading}>
-            <Sparkle size={16} weight="duotone" />
-            {isLoading ? 'Searching...' : 'Ask AI'}
+          <Button onClick={handleSearch} disabled={!query.trim() || isLoading} className="gap-2">
+            {isAzureEnabled ? (
+              <Lightning size={16} weight="duotone" />
+            ) : (
+              <Sparkle size={16} weight="duotone" />
+            )}
+            {isLoading ? 'Searching...' : isAzureEnabled ? 'Azure Search' : 'Ask AI'}
           </Button>
         </div>
+        {isAzureEnabled && (
+          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+            <Lightning size={12} className="text-accent" weight="fill" />
+            Using Azure AI Search for enhanced semantic search
+          </p>
+        )}
       </Card>
       
       {(displayedText || isLoading) && (
@@ -113,6 +188,12 @@ Provide a helpful answer based on the context above. If the context doesn't cont
                 <Sparkle size={16} className="text-accent" weight="duotone" />
               </div>
               <h3 className="font-semibold">AI Response</h3>
+              {searchMethod === 'azure' && !isLoading && (
+                <Badge variant="secondary" className="ml-auto text-xs gap-1">
+                  <Lightning size={12} weight="fill" />
+                  Azure AI Search
+                </Badge>
+              )}
             </div>
             
             {isLoading ? (
@@ -137,6 +218,33 @@ Provide a helpful answer based on the context above. If the context doesn't cont
                           <Badge key={index} variant="secondary" className="text-xs">
                             {source}
                           </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+                
+                {searchResults.length > 0 && (
+                  <>
+                    <Separator className="my-4" />
+                    <div>
+                      <p className="text-sm font-medium mb-3">Search Results (Relevance Scores):</p>
+                      <div className="space-y-2">
+                        {searchResults.map((result, index) => (
+                          <div key={index} className="text-xs p-2 bg-muted/50 rounded-md">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-medium">{result.title}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {result.score.toFixed(2)}
+                              </Badge>
+                            </div>
+                            {result.highlights && result.highlights.length > 0 && (
+                              <div 
+                                className="text-muted-foreground"
+                                dangerouslySetInnerHTML={{ __html: result.highlights[0] }}
+                              />
+                            )}
+                          </div>
                         ))}
                       </div>
                     </div>

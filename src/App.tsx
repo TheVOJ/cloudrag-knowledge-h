@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useKV } from '@github/spark/hooks'
-import { KnowledgeBase, Document, Query, SourceType } from '@/lib/types'
+import { KnowledgeBase, Document, Query, SourceType, AzureSearchSettings } from '@/lib/types'
 import { generateId, simulateDocumentExtraction } from '@/lib/helpers'
+import { AzureSearchService } from '@/lib/azure-search'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { KnowledgeBaseCard } from '@/components/KnowledgeBaseCard'
@@ -11,7 +12,8 @@ import { DocumentListItem } from '@/components/DocumentListItem'
 import { DocumentViewerDialog } from '@/components/DocumentViewerDialog'
 import { QueryInterface } from '@/components/QueryInterface'
 import { QueryHistory } from '@/components/QueryHistory'
-import { Database, Plus, ArrowLeft, ChartBar, MagnifyingGlass, FileText } from '@phosphor-icons/react'
+import { AzureSettingsDialog } from '@/components/AzureSettingsDialog'
+import { Database, Plus, ArrowLeft, ChartBar, MagnifyingGlass, FileText, Gear, Lightning } from '@phosphor-icons/react'
 import { toast, Toaster } from 'sonner'
 import { motion } from 'framer-motion'
 
@@ -21,6 +23,11 @@ function App() {
   const [knowledgeBases, setKnowledgeBases] = useKV<KnowledgeBase[]>('knowledge-bases', [])
   const [documents, setDocuments] = useKV<Document[]>('documents', [])
   const [queries, setQueries] = useKV<Query[]>('queries', [])
+  const [azureSettings, setAzureSettings] = useKV<AzureSearchSettings>('azure-settings', {
+    endpoint: '',
+    apiKey: '',
+    enabled: false,
+  })
   
   const [currentView, setCurrentView] = useState<View>('dashboard')
   const [selectedKB, setSelectedKB] = useState<KnowledgeBase | null>(null)
@@ -28,12 +35,15 @@ function App() {
   const [showAddContentDialog, setShowAddContentDialog] = useState(false)
   const [viewingDocument, setViewingDocument] = useState<Document | null>(null)
   const [showDocumentViewer, setShowDocumentViewer] = useState(false)
+  const [showAzureSettings, setShowAzureSettings] = useState(false)
+  const [syncingToAzure, setSyncingToAzure] = useState(false)
   
   const kbs = knowledgeBases || []
   const docs = documents || []
   const qs = queries || []
   
-  const handleCreateKB = (name: string, description: string) => {
+  const handleCreateKB = async (name: string, description: string) => {
+    const indexName = `kb-${generateId().toLowerCase().replace(/[^a-z0-9-]/g, '')}`
     const newKB: KnowledgeBase = {
       id: generateId(),
       name,
@@ -41,8 +51,25 @@ function App() {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       documentCount: 0,
-      sources: []
+      sources: [],
+      azureSearchEnabled: azureSettings?.enabled || false,
+      azureIndexName: azureSettings?.enabled ? indexName : undefined,
     }
+    
+    if (azureSettings?.enabled && azureSettings.endpoint && azureSettings.apiKey) {
+      try {
+        const service = new AzureSearchService({
+          endpoint: azureSettings.endpoint,
+          apiKey: azureSettings.apiKey,
+          indexName,
+        })
+        await service.createIndex()
+        toast.success(`Knowledge base "${name}" created with Azure AI Search`)
+      } catch (error) {
+        toast.error('Failed to create Azure index: ' + (error instanceof Error ? error.message : 'Unknown error'))
+      }
+    }
+    
     setKnowledgeBases((current) => [...(current || []), newKB])
     toast.success(`Knowledge base "${name}" created successfully`)
   }
@@ -59,7 +86,7 @@ function App() {
     setCurrentView('details')
   }
   
-  const handleAddContent = (sourceType: SourceType, sourceUrl: string) => {
+  const handleAddContent = async (sourceType: SourceType, sourceUrl: string) => {
     if (!selectedKB) return
     
     const extracted = simulateDocumentExtraction(sourceType, sourceUrl)
@@ -74,6 +101,20 @@ function App() {
     }
     
     setDocuments((current) => [...(current || []), newDoc])
+    
+    if (selectedKB.azureSearchEnabled && selectedKB.azureIndexName && azureSettings?.enabled) {
+      try {
+        const service = new AzureSearchService({
+          endpoint: azureSettings.endpoint,
+          apiKey: azureSettings.apiKey,
+          indexName: selectedKB.azureIndexName,
+        })
+        await service.indexDocuments([newDoc])
+        toast.success('Content indexed in Azure AI Search')
+      } catch (error) {
+        toast.error('Failed to index in Azure: ' + (error instanceof Error ? error.message : 'Unknown error'))
+      }
+    }
     
     setKnowledgeBases((current) =>
       (current || []).map(kb => {
@@ -159,7 +200,7 @@ function App() {
     toast.success('Document updated successfully')
   }
   
-  const handleQuery = (query: string, response: string, sources: string[]) => {
+  const handleQuery = (query: string, response: string, sources: string[], searchMethod: 'simulated' | 'azure') => {
     if (!selectedKB) return
     
     const newQuery: Query = {
@@ -168,10 +209,41 @@ function App() {
       query,
       response,
       sources,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      searchMethod,
     }
     
     setQueries((current) => [...(current || []), newQuery])
+  }
+  
+  const handleSaveAzureSettings = (settings: AzureSearchSettings) => {
+    setAzureSettings(settings)
+  }
+  
+  const syncExistingDocumentsToAzure = async () => {
+    if (!selectedKB || !selectedKB.azureIndexName || !azureSettings?.enabled) return
+    
+    const kbDocs = getKBDocuments(selectedKB.id)
+    if (kbDocs.length === 0) {
+      toast.info('No documents to sync')
+      return
+    }
+    
+    setSyncingToAzure(true)
+    try {
+      const service = new AzureSearchService({
+        endpoint: azureSettings.endpoint,
+        apiKey: azureSettings.apiKey,
+        indexName: selectedKB.azureIndexName,
+      })
+      
+      await service.indexDocuments(kbDocs)
+      toast.success(`Synced ${kbDocs.length} documents to Azure AI Search`)
+    } catch (error) {
+      toast.error('Sync failed: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    } finally {
+      setSyncingToAzure(false)
+    }
   }
   
   const getKBDocuments = (kbId: string) => {
@@ -256,11 +328,30 @@ function App() {
             <div>
               <h1 className="text-3xl font-semibold tracking-tight mb-2">{selectedKB.name}</h1>
               <p className="text-muted-foreground">{selectedKB.description}</p>
+              {selectedKB.azureSearchEnabled && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Lightning size={16} weight="fill" className="text-accent" />
+                  <span className="text-sm text-muted-foreground">Azure AI Search enabled</span>
+                </div>
+              )}
             </div>
-            <Button onClick={() => setShowAddContentDialog(true)} className="gap-2">
-              <Plus size={20} weight="bold" />
-              Add Content
-            </Button>
+            <div className="flex gap-2">
+              {selectedKB.azureSearchEnabled && azureSettings?.enabled && kbDocs.length > 0 && (
+                <Button 
+                  variant="outline" 
+                  onClick={syncExistingDocumentsToAzure} 
+                  disabled={syncingToAzure}
+                  className="gap-2"
+                >
+                  <Lightning size={16} weight="duotone" />
+                  {syncingToAzure ? 'Syncing...' : 'Sync to Azure'}
+                </Button>
+              )}
+              <Button onClick={() => setShowAddContentDialog(true)} className="gap-2">
+                <Plus size={20} weight="bold" />
+                Add Content
+              </Button>
+            </div>
           </div>
         </div>
         
@@ -294,6 +385,8 @@ function App() {
                 knowledgeBaseName={selectedKB.name}
                 documents={kbDocs}
                 onQuery={handleQuery}
+                azureSettings={azureSettings}
+                indexName={selectedKB.azureIndexName}
               />
             )}
           </TabsContent>
@@ -382,6 +475,18 @@ function App() {
                 <ChartBar size={16} />
                 <span className="hidden sm:inline">Analytics</span>
               </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setShowAzureSettings(true)}
+                className="gap-2"
+              >
+                {azureSettings?.enabled ? (
+                  <Lightning size={16} weight="fill" className="text-accent" />
+                ) : (
+                  <Gear size={16} />
+                )}
+                <span className="hidden sm:inline">Azure Search</span>
+              </Button>
             </div>
           </div>
         </div>
@@ -410,6 +515,13 @@ function App() {
         open={showDocumentViewer}
         onOpenChange={setShowDocumentViewer}
         onSave={handleSaveDocument}
+      />
+      
+      <AzureSettingsDialog
+        open={showAzureSettings}
+        onOpenChange={setShowAzureSettings}
+        settings={azureSettings || { endpoint: '', apiKey: '', enabled: false }}
+        onSave={handleSaveAzureSettings}
       />
     </div>
   )

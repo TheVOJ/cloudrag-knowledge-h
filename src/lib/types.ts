@@ -22,6 +22,8 @@ export interface KnowledgeBase {
   updatedAt: number
   documentCount: number
   sources: SourceType[]
+  azureSearchEnabled?: boolean
+  azureIndexName?: string
 }
 
 export interface Query {
@@ -31,4 +33,11 @@ export interface Query {
   response: string
   sources: string[]
   timestamp: number
+  searchMethod?: 'simulated' | 'azure'
+}
+
+export interface AzureSearchSettings {
+  endpoint: string
+  apiKey: string
+  enabled: boolean
 }

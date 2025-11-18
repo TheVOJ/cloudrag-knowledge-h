@@ -1,14 +1,14 @@
 # Planning Guide
 
-A knowledge base management system that allows users to create, organize, and query custom RAG (Retrieval-Augmented Generation) indexes from multiple data sources including web content, documents, and simulated repository ingestion.
+A knowledge base management system that allows users to create, organize, and query custom RAG (Retrieval-Augmented Generation) indexes from multiple data sources including web content, documents, and simulated repository ingestion, with optional Azure AI Search integration for enhanced semantic search capabilities.
 
 **Experience Qualities**:
 1. **Professional** - Enterprise-grade interface that conveys trust and reliability for managing critical knowledge assets
 2. **Efficient** - Streamlined workflows that minimize clicks between creating indexes, ingesting content, and retrieving answers
-3. **Intelligent** - Smart search and AI-powered responses that feel contextually aware and accurate
+3. **Intelligent** - Smart search and AI-powered responses that feel contextually aware and accurate, with optional cloud-powered vector search
 
 **Complexity Level**: Complex Application (advanced functionality, accounts)
-  - Multiple interconnected features including knowledge base management, document ingestion, search interfaces, and AI-powered querying with persistent state across sessions
+  - Multiple interconnected features including knowledge base management, document ingestion, search interfaces, and AI-powered querying with persistent state across sessions, plus optional Azure AI Search integration
 
 ## Essential Features
 
@@ -27,11 +27,18 @@ A knowledge base management system that allows users to create, organize, and qu
 - **Success criteria**: Content appears in document list, metadata extracted, searchable within knowledge base
 
 ### Intelligent Search & Query
-- **Functionality**: Natural language search with AI-powered responses using LLM and indexed content
-- **Purpose**: Retrieve contextually relevant answers from knowledge bases using RAG methodology
+- **Functionality**: Natural language search with AI-powered responses using LLM and indexed content, with optional Azure AI Search for semantic vector search
+- **Purpose**: Retrieve contextually relevant answers from knowledge bases using RAG methodology with enhanced relevance scoring
 - **Trigger**: User enters question in search interface
-- **Progression**: Enter query → System searches relevant knowledge bases → LLM generates response with source citations → Display answer with references → Option to refine query
-- **Success criteria**: Responses reference indexed content, include source citations, feel contextually accurate
+- **Progression**: Enter query → System searches relevant knowledge bases (via simulated search or Azure AI Search) → LLM generates response with source citations → Display answer with references and relevance scores → Option to refine query
+- **Success criteria**: Responses reference indexed content, include source citations with relevance scores when using Azure Search, feel contextually accurate
+
+### Azure AI Search Integration
+- **Functionality**: Configure and connect Azure Cognitive Search service for enhanced semantic search and vector-based retrieval
+- **Purpose**: Provide enterprise-grade search capabilities with better relevance ranking and semantic understanding
+- **Trigger**: User clicks Azure Search settings in header
+- **Progression**: Open settings → Enable Azure Search toggle → Enter endpoint and API key → Test connection → Save → New knowledge bases automatically create Azure indexes → Documents are indexed to Azure → Queries use Azure semantic search
+- **Success criteria**: Connection tests successfully, indexes are created automatically, documents sync to Azure, queries show relevance scores, better search results than simulated mode
 
 ### Source Management
 - **Functionality**: View, filter, and manage all indexed documents and their metadata
@@ -54,6 +61,9 @@ A knowledge base management system that allows users to create, organize, and qu
 - **Invalid URLs**: Validate and provide clear error messages for malformed or inaccessible sources
 - **Query Failures**: Gracefully handle cases where LLM cannot generate good responses with fallback messages
 - **Large Knowledge Bases**: Implement pagination and virtual scrolling for performance with many documents
+- **Azure Connection Failures**: Handle network errors gracefully, fall back to simulated search if Azure is unavailable
+- **API Key Security**: Mask API keys in UI, validate credentials before saving
+- **Index Naming Conflicts**: Generate unique index names automatically to prevent collisions
 
 ## Design Direction
 The design should feel professional, technical, and trustworthy like enterprise AI platforms (think Notion AI meets Azure Portal) with a clean, data-dense interface that prioritizes information hierarchy and efficient workflows over decorative elements.

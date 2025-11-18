@@ -2,7 +2,7 @@ import { KnowledgeBase } from '@/lib/types'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Database, Trash, FileText } from '@phosphor-icons/react'
+import { Database, Trash, FileText, Lightning } from '@phosphor-icons/react'
 import { formatDate, getSourceIcon } from '@/lib/helpers'
 
 interface KnowledgeBaseCardProps {
@@ -23,7 +23,15 @@ export function KnowledgeBaseCard({ knowledgeBase, onSelect, onDelete }: Knowled
             <Database size={20} className="text-primary" weight="duotone" />
           </div>
           <div>
-            <h3 className="font-semibold text-lg tracking-tight">{knowledgeBase.name}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-lg tracking-tight">{knowledgeBase.name}</h3>
+              {knowledgeBase.azureSearchEnabled && (
+                <Badge variant="secondary" className="text-xs gap-1">
+                  <Lightning size={12} weight="fill" />
+                  Azure
+                </Badge>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">{formatDate(knowledgeBase.createdAt)}</p>
           </div>
         </div>
