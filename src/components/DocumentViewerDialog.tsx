@@ -1,67 +1,82 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Document } from '@/lib/types'
-  Dialog
+import {
   Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
-import { Button } fr
-import { Textar
-import { Badge 
-  DialogTitle,
-import { getSourceIcon, getSour
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Link, X, FloppyDisk, PencilSimple } from '@phosphor-icons/react'
+import { formatDate, getSourceIcon, getSourceLabel, extractDomain } from '@/lib/helpers'
+import { marked } from 'marked'
 
+interface DocumentViewerDialogProps {
   document: Document | null
+  open: boolean
   onOpenChange: (open: boolean) => void
+  onSave: (id: string, title: string, content: string) => void
 }
+
 export function DocumentViewerDialog({
+  document,
   open,
+  onOpenChange,
   onSave,
+}: DocumentViewerDialogProps) {
   const [isEditing, setIsEditing] = useState(false)
+  const [editedTitle, setEditedTitle] = useState('')
   const [editedContent, setEditedContent] = useState('')
 
-
-      return marked.parse(document.co
-  document: Document | null
-  }, [document?
-  onOpenChange: (open: boolean) => void
+  useEffect(() => {
+    if (document) {
       setEditedTitle(document.title)
-}
+      setEditedContent(document.content)
+    }
+  }, [document])
 
-export function DocumentViewerDialog({
-  const han
-  open,
-  }
-  onSave,
-      setEditedTitle(document.t
-  const [isEditing, setIsEditing] = useState(false)
-  }
-  const [editedContent, setEditedContent] = useState('')
+  const renderedMarkdown = useMemo(() => {
+    if (!document) return ''
+    try {
+      return marked.parse(document.content)
+    } catch {
+      return document.content
+    }
+  }, [document?.content])
 
-      <DialogContent className="max-w-4xl m
-          <div className="fle
-              {isEditing ? (
-                  value={editedTitle}
+  const handleOpen = (isOpen: boolean) => {
+    if (!isOpen) {
       setIsEditing(false)
-     
+    }
     onOpenChange(isOpen)
-   
+  }
 
-                </Badge>
-    if (!document) return
-                  {extractDomain(document.sourceUrl
+  const handleSave = () => {
+    if (document) {
+      onSave(document.id, editedTitle, editedContent)
+      setIsEditing(false)
+    }
+  }
+
+  const handleCancel = () => {
+    if (document) {
+      setEditedTitle(document.title)
+      setEditedContent(document.content)
+    }
     setIsEditing(false)
-   
+  }
 
-                variant="outli
-                onC
-              >
-                Edit
-     
-        </DialogHeader>
-   
+  if (!document) return null
 
-              Preview
-
-          
+  return (
     <Dialog open={open} onOpenChange={handleOpen}>
       <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
         <DialogHeader>
@@ -95,110 +110,104 @@ export function DocumentViewerDialog({
               <Button
                 variant="outline"
                 size="sm"
-                  </p>
+                onClick={() => setIsEditing(true)}
+                className="gap-2"
+              >
+                <PencilSimple size={16} />
+                Edit
+              </Button>
+            )}
+          </div>
+        </DialogHeader>
 
-               
-                      Added At
-                    
-                    </p
+        <Tabs defaultValue="preview" className="flex-1 flex flex-col min-h-0">
+          <TabsList>
+            <TabsTrigger value="preview">Preview</TabsTrigger>
+            <TabsTrigger value="raw">Raw</TabsTrigger>
+            <TabsTrigger value="metadata">Metadata</TabsTrigger>
+          </TabsList>
 
-                
-                       
+          <TabsContent value="preview" className="flex-1 min-h-0">
+            <ScrollArea className="h-full">
+              {isEditing ? (
+                <Textarea
+                  value={editedContent}
+                  onChange={(e) => setEditedContent(e.target.value)}
+                  className="min-h-[400px] font-mono text-sm"
+                  placeholder="Document content..."
+                />
+              ) : (
+                <div
+                  className="prose prose-sm max-w-none p-4"
+                  dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
+                />
+              )}
+            </ScrollArea>
+          </TabsContent>
 
-                      </p>
-                  )}
+          <TabsContent value="raw" className="flex-1 min-h-0">
+            <ScrollArea className="h-full">
+              <pre className="bg-muted p-4 rounded-lg text-xs font-mono whitespace-pre-wrap break-words">
+                {document.content}
+              </pre>
+            </ScrollArea>
+          </TabsContent>
 
-                  <div>
-                     
-                    <p cla
-                    </p>
-                )}
-                {document.
-                    <
-
-                      {new Date(document.metadata.lastModified).toLo
-                  </div>
-
-                  <Label className="t
-                  </Label>
-                    {document.content.length.toLocaleString()} characters
-                </div>
-            </Sc
-        </Tabs>
-        <DialogFooter>
-            <div className="flex gap-2 w-full sm:w-auto">
-                <X size={16} />
-              </Button
-                <FloppyDisk
-              
-          ) : (
-
-          )}
-      </DialogContent>
-  )
+          <TabsContent value="metadata" className="flex-1 min-h-0">
+            <ScrollArea className="h-full">
+              <div className="space-y-4 p-4">
                 <div>
+                  <Label className="text-sm font-semibold text-muted-foreground">
+                    Source URL
+                  </Label>
+                  <p className="mt-1 text-sm bg-muted p-2 rounded break-all">
+                    {document.sourceUrl}
+                  </p>
+                </div>
 
+                <div>
+                  <Label className="text-sm font-semibold text-muted-foreground">
+                    Added At
+                  </Label>
+                  <p className="mt-1 text-sm bg-muted p-2 rounded">
+                    {new Date(document.addedAt).toLocaleString()}
+                  </p>
+                </div>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+                {document.metadata.size && (
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">
+                      Size
+                    </Label>
                     <p className="mt-1 text-sm bg-muted p-2 rounded">
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                      {new Date(document.metadata.lastModified).toLocaleString()}
-
+                      {(document.metadata.size / 1024).toFixed(2)} KB
+                    </p>
                   </div>
                 )}
 
+                {document.metadata.lastModified && (
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">
+                      Last Modified
+                    </Label>
+                    <p className="mt-1 text-sm bg-muted p-2 rounded">
+                      {new Date(document.metadata.lastModified).toLocaleString()}
+                    </p>
+                  </div>
+                )}
 
+                {document.metadata.author && (
+                  <div>
+                    <Label className="text-sm font-semibold text-muted-foreground">
+                      Author
+                    </Label>
+                    <p className="mt-1 text-sm bg-muted p-2 rounded">
+                      {document.metadata.author}
+                    </p>
+                  </div>
+                )}
+
+                <div>
                   <Label className="text-sm font-semibold text-muted-foreground">
                     Content Length
                   </Label>
@@ -212,24 +221,24 @@ export function DocumentViewerDialog({
         </Tabs>
 
         <DialogFooter>
-
+          {isEditing ? (
             <div className="flex gap-2 w-full sm:w-auto">
               <Button variant="outline" onClick={handleCancel} className="gap-2">
                 <X size={16} />
-
+                Cancel
               </Button>
               <Button onClick={handleSave} className="gap-2">
                 <FloppyDisk size={16} weight="bold" />
                 Save Changes
               </Button>
-
+            </div>
           ) : (
             <Button variant="outline" onClick={() => handleOpen(false)}>
               Close
-
+            </Button>
           )}
-
+        </DialogFooter>
       </DialogContent>
-
+    </Dialog>
   )
 }
