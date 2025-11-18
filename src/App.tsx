@@ -13,10 +13,11 @@ import { AddContentDialog } from '@/components/AddContentDialog'
 import { DocumentListItem } from '@/components/DocumentListItem'
 import { DocumentViewerDialog } from '@/components/DocumentViewerDialog'
 import { QueryInterface } from '@/components/QueryInterface'
+import { AgenticQueryInterface } from '@/components/AgenticQueryInterface'
 import { QueryHistory } from '@/components/QueryHistory'
 import { AzureSettingsDialog } from '@/components/AzureSettingsDialog'
 import { ChunkVisualizerDialog } from '@/components/ChunkVisualizerDialog'
-import { Database, Plus, ArrowLeft, ChartBar, MagnifyingGlass, FileText, Gear, Lightning } from '@phosphor-icons/react'
+import { Database, Plus, ArrowLeft, ChartBar, MagnifyingGlass, FileText, Gear, Lightning, Brain } from '@phosphor-icons/react'
 import { toast, Toaster } from 'sonner'
 import { motion } from 'framer-motion'
 
@@ -42,6 +43,7 @@ function App() {
   const [syncingToAzure, setSyncingToAzure] = useState(false)
   const [showChunkVisualizer, setShowChunkVisualizer] = useState(false)
   const [visualizerDocument, setVisualizerDocument] = useState<Document | null>(null)
+  const [agenticMode, setAgenticMode] = useState(false)
   
   const kbs = knowledgeBases || []
   const docs = documents || []
@@ -231,7 +233,7 @@ function App() {
     toast.success('Document updated successfully')
   }
   
-  const handleQuery = (query: string, response: string, sources: string[], searchMethod: 'simulated' | 'azure') => {
+  const handleQuery = (query: string, response: string, sources: string[], searchMethod: 'simulated' | 'azure' | 'agentic') => {
     if (!selectedKB) return
     
     const newQuery: Query = {
@@ -241,7 +243,7 @@ function App() {
       response,
       sources,
       timestamp: Date.now(),
-      searchMethod,
+      searchMethod: searchMethod === 'agentic' ? 'azure' : searchMethod,
     }
     
     setQueries((current) => [...(current || []), newQuery])
@@ -412,13 +414,55 @@ function App() {
                 </Button>
               </div>
             ) : (
-              <QueryInterface
-                knowledgeBaseName={selectedKB.name}
-                documents={kbDocs}
-                onQuery={handleQuery}
-                azureSettings={azureSettings}
-                indexName={selectedKB.azureIndexName}
-              />
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="font-medium">Query Mode:</span>
+                    <Button
+                      variant={!agenticMode ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setAgenticMode(false)}
+                      className="gap-1 h-8"
+                    >
+                      <MagnifyingGlass size={14} />
+                      Standard
+                    </Button>
+                    <Button
+                      variant={agenticMode ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setAgenticMode(true)}
+                      className="gap-1 h-8"
+                    >
+                      <Brain size={14} weight="duotone" />
+                      Agentic
+                    </Button>
+                  </div>
+                  {agenticMode && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Brain size={12} className="text-accent" weight="fill" />
+                      Advanced multi-strategy routing with self-evaluation
+                    </div>
+                  )}
+                </div>
+                
+                {agenticMode ? (
+                  <AgenticQueryInterface
+                    knowledgeBaseName={selectedKB.name}
+                    documents={kbDocs}
+                    onQuery={handleQuery}
+                    azureSettings={azureSettings}
+                    indexName={selectedKB.azureIndexName}
+                  />
+                ) : (
+                  <QueryInterface
+                    knowledgeBaseName={selectedKB.name}
+                    documents={kbDocs}
+                    onQuery={handleQuery}
+                    azureSettings={azureSettings}
+                    indexName={selectedKB.azureIndexName}
+                  />
+                )}
+              </div>
             )}
           </TabsContent>
           

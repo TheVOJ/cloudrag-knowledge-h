@@ -1,14 +1,14 @@
 # Planning Guide
 
-A knowledge base management system that allows users to create, organize, and query custom RAG (Retrieval-Augmented Generation) indexes from multiple data sources including real web scraping, GitHub repository ingestion, and cloud storage, with Azure AI Search integration for enhanced semantic search and document chunking visualization capabilities.
+A knowledge base management system that allows users to create, organize, and query custom RAG (Retrieval-Augmented Generation) indexes from multiple data sources including real web scraping, GitHub repository ingestion, and cloud storage, with Azure AI Search integration for enhanced semantic search, document chunking visualization capabilities, and advanced agentic RAG patterns for intelligent query routing and self-correcting responses.
 
 **Experience Qualities**:
-1. **Professional** - Enterprise-grade interface that conveys trust and reliability for managing critical knowledge assets
-2. **Efficient** - Streamlined workflows that minimize clicks between creating indexes, ingesting content, and retrieving answers
-3. **Intelligent** - Smart search and AI-powered responses that feel contextually aware and accurate, with cloud-powered vector search and embedding visualization
+1. **Professional** - Enterprise-grade interface that conveys trust and reliability for managing critical knowledge assets with transparent AI decision-making
+2. **Efficient** - Streamlined workflows that minimize clicks between creating indexes, ingesting content, and retrieving answers with intelligent agent orchestration
+3. **Intelligent** - Smart search and AI-powered responses that feel contextually aware and accurate, with cloud-powered vector search, embedding visualization, and autonomous agent routing that adapts strategies based on query characteristics
 
 **Complexity Level**: Complex Application (advanced functionality, accounts)
-  - Multiple interconnected features including knowledge base management, real document ingestion from web and GitHub, search interfaces, AI-powered querying with persistent state across sessions, Azure AI Search integration, and document chunking with embedding visualization
+  - Multiple interconnected features including knowledge base management, real document ingestion from web and GitHub, search interfaces, AI-powered querying with persistent state across sessions, Azure AI Search integration, document chunking with embedding visualization, and advanced agentic RAG with intent classification, multi-strategy retrieval, self-reflection, and automatic query reformulation
 
 ## Essential Features
 
@@ -48,11 +48,53 @@ A knowledge base management system that allows users to create, organize, and qu
 - **Success criteria**: Multiple chunking strategies available (fixed, sentence, paragraph, semantic), embeddings visualized in 2D space, similarity calculations between chunks, interactive selection
 
 ### Intelligent Search & Query
-- **Functionality**: Natural language search with AI-powered responses using LLM and indexed content, with Azure AI Search for semantic vector search
-- **Purpose**: Retrieve contextually relevant answers from knowledge bases using RAG methodology with enhanced relevance scoring
+- **Functionality**: Natural language search with AI-powered responses using LLM and indexed content, with Azure AI Search for semantic vector search. Supports both standard RAG and advanced agentic RAG with intelligent routing.
+- **Purpose**: Retrieve contextually relevant answers from knowledge bases using RAG methodology with enhanced relevance scoring, and provide transparent insight into AI decision-making processes
 - **Trigger**: User enters question in search interface
-- **Progression**: Enter query → System searches relevant knowledge bases (via simulated search or Azure AI Search) → LLM generates response with source citations → Display answer with references and relevance scores → Option to refine query
-- **Success criteria**: Responses reference indexed content, include source citations with relevance scores when using Azure Search, feel contextually accurate
+- **Progression**: Enter query → User selects Standard or Agentic mode → System analyzes intent (agentic only) → Routes to optimal strategy (semantic/keyword/hybrid/multi-query/RAG fusion) → Executes retrieval → LLM generates response with source citations → Self-evaluates quality (agentic only) → Displays answer with optional detailed agent breakdown → Auto-corrects if confidence low
+- **Success criteria**: Responses reference indexed content, include source citations with relevance scores when using Azure Search, feel contextually accurate. In agentic mode: shows intent classification, retrieval strategy selection, confidence scores, self-evaluation tokens, and improvement suggestions when needed.
+
+### Agentic RAG Query Routing
+- **Functionality**: Intelligent agent-based query routing that analyzes query intent, selects optimal retrieval strategies, performs multi-stage retrieval with self-evaluation, and auto-corrects low-confidence responses
+- **Purpose**: Transform simple one-shot RAG into adaptive, self-improving retrieval system that makes intelligent decisions about how to answer queries
+- **Trigger**: User selects "Agentic" mode toggle in query interface
+- **Progression**: Enter query → Agent classifies intent (factual/analytical/comparative/procedural/clarification/chitchat/out_of_scope) → Analyzes query complexity, specificity, and scope → Routes to optimal strategy (semantic/keyword/hybrid/multi_query/rag_fusion) → Executes retrieval with quality evaluation → Generates response → Self-evaluates with reflection tokens (RELEVANT/SUPPORTED/USEFUL) → Optional critic feedback on logic/accuracy/completeness → If confidence low, automatically reformulates and retries → Returns answer with full transparency of decision path
+- **Success criteria**: Intent correctly classified, appropriate strategy selected, multi-iteration refinement when needed, high confidence final answers, transparent decision trail visible in agent details panel
+
+### Query Intent Classification
+- **Functionality**: LLM-based classification of user queries into intent categories to guide retrieval strategy selection
+- **Purpose**: Enable context-aware routing by understanding what type of answer the user needs
+- **Trigger**: Query submitted in agentic mode
+- **Progression**: Analyze query → LLM classifies into factual/analytical/comparative/procedural/clarification/chitchat/out_of_scope → Intent used for strategy selection
+- **Success criteria**: Accurate intent classification, appropriate handling of chitchat and out-of-scope queries, influences retrieval strategy selection
+
+### Multi-Strategy Retrieval
+- **Functionality**: Support for multiple retrieval strategies including semantic (embedding-based), keyword (BM25-style), hybrid (combined), multi-query (query decomposition), and RAG fusion (query expansion with reciprocal rank fusion)
+- **Purpose**: Match retrieval approach to query characteristics for optimal results
+- **Trigger**: Agentic router selects strategy based on query analysis
+- **Progression**: Strategy selected → Execute retrieval (may include sub-query generation, query expansion, or parallel retrieval) → Rank and merge results → Return top-k with scores
+- **Success criteria**: Different strategies produce meaningfully different result sets, complex queries handled via multi-query decomposition, RAG fusion improves recall
+
+### Self-Reflective RAG
+- **Functionality**: Automated evaluation of retrieval relevance, response support, and utility using reflection tokens (RELEVANT/PARTIALLY_RELEVANT/NOT_RELEVANT, FULLY_SUPPORTED/PARTIALLY_SUPPORTED/NOT_SUPPORTED, USEFUL/SOMEWHAT_USEFUL/NOT_USEFUL)
+- **Purpose**: Enable system to self-assess quality and trigger corrections without human intervention
+- **Trigger**: After response generation in agentic mode
+- **Progression**: Generate response → Evaluate retrieval relevance → Check if response supported by sources → Assess utility for answering query → Calculate confidence score → Determine if retry needed → Provide improvement suggestions
+- **Success criteria**: Accurate quality assessment, appropriate retry decisions, hallucinations detected via support evaluation, confidence scores correlate with actual quality
+
+### Critic Agent Feedback
+- **Functionality**: Optional secondary evaluation pass that analyzes logical consistency, factual accuracy, completeness, identifies hallucinations and gaps, and provides actionable suggestions
+- **Purpose**: Provide deeper quality analysis and catch issues the primary evaluator might miss
+- **Trigger**: Enabled by default in agentic mode after self-evaluation
+- **Progression**: Response generated → Critic evaluates logic/accuracy/completeness → Identifies specific hallucinations and gaps → Suggests improvements → Feedback used for retry decisions
+- **Success criteria**: Identifies factual errors, spots logical inconsistencies, detects missing information, provides actionable improvement suggestions
+
+### Automatic Query Reformulation
+- **Functionality**: When confidence is low or retrieval quality poor, system automatically reformulates the query based on evaluation feedback and retries (up to 3 iterations)
+- **Purpose**: Self-correct poor initial results without requiring user intervention
+- **Trigger**: Low confidence score (<0.6) or poor retrieval quality detected
+- **Progression**: Initial query fails quality check → System analyzes failure reasons → LLM reformulates query to address issues (e.g., add specificity, break into sub-queries, expand context) → Retry with reformulated query → Repeat until confidence threshold met or max iterations reached
+- **Success criteria**: Reformulations improve results, iterative refinement visible in metadata, final answers have higher confidence than initial attempts, system stops when quality acceptable
 
 ### Azure AI Search Integration
 - **Functionality**: Configure and connect Azure Cognitive Search service for enhanced semantic search and vector-based retrieval
@@ -90,6 +132,11 @@ A knowledge base management system that allows users to create, organize, and qu
 - **Index Naming Conflicts**: Generate unique index names automatically to prevent collisions
 - **Embedding Generation Failures**: Fall back to simulated embeddings when LLM calls fail
 - **Chunk Visualization with Many Chunks**: Handle documents with 50+ chunks efficiently
+- **Agentic RAG Failures**: Gracefully degrade to standard RAG if agent orchestration fails, show error details in agent panel
+- **Low Confidence Loops**: Prevent infinite retry loops with max iteration limits (3 iterations)
+- **Intent Misclassification**: Provide fallback routing strategy when intent classification fails or is ambiguous
+- **Multi-Query Performance**: Limit sub-queries to 5 maximum to prevent excessive LLM calls
+- **RAG Fusion Overhead**: Cache query expansions to avoid redundant generation on retries
 
 ## Design Direction
 The design should feel professional, technical, and trustworthy like enterprise AI platforms (think Notion AI meets Azure Portal) with a clean, data-dense interface that prioritizes information hierarchy and efficient workflows over decorative elements.
