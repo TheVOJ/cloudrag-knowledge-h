@@ -14,13 +14,15 @@ import {
   ArrowsClockwise,
   CheckCircle,
   WarningCircle,
-  Info
+  Info,
+  FlowArrow
 } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Document, AzureSearchSettings } from '@/lib/types'
 import { AgenticRAGOrchestrator, AgenticRAGResponse } from '@/lib/agentic-rag-orchestrator'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { AgenticFlowDiagram } from '@/components/AgenticFlowDiagram'
 
 interface AgenticQueryInterfaceProps {
   knowledgeBaseName: string
@@ -240,6 +242,14 @@ export function AgenticQueryInterface({
                 {getConfidenceBadge(response.evaluation.confidence)}
               </div>
               
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
+                  <FlowArrow size={14} weight="duotone" />
+                  <span>Query Flow:</span>
+                </div>
+                <AgenticFlowDiagram response={response} compact />
+              </div>
+              
               <div className="prose prose-sm max-w-none mb-4">
                 <p className="text-foreground leading-relaxed whitespace-pre-wrap">{displayedText}</p>
               </div>
@@ -271,13 +281,18 @@ export function AgenticQueryInterface({
                 </CollapsibleTrigger>
                 
                 <CollapsibleContent>
-                  <Tabs defaultValue="routing" className="mt-4">
-                    <TabsList className="grid w-full grid-cols-4">
+                  <Tabs defaultValue="flow" className="mt-4">
+                    <TabsList className="grid w-full grid-cols-5">
+                      <TabsTrigger value="flow">Flow</TabsTrigger>
                       <TabsTrigger value="routing">Routing</TabsTrigger>
                       <TabsTrigger value="retrieval">Retrieval</TabsTrigger>
                       <TabsTrigger value="evaluation">Evaluation</TabsTrigger>
                       <TabsTrigger value="meta">Metadata</TabsTrigger>
                     </TabsList>
+                    
+                    <TabsContent value="flow" className="mt-4">
+                      <AgenticFlowDiagram response={response} />
+                    </TabsContent>
                     
                     <TabsContent value="routing" className="space-y-3">
                       <div className="grid grid-cols-2 gap-3 text-sm">
