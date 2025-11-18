@@ -3,6 +3,8 @@ import { useKV } from '@github/spark/hooks'
 import { KnowledgeBase, Document, Query, SourceType, AzureSearchSettings } from '@/lib/types'
 import { generateId, simulateDocumentExtraction } from '@/lib/helpers'
 import { AzureSearchService } from '@/lib/azure-search'
+import { scrapeWebContent, convertToDocument as convertWebToDocument } from '@/lib/web-scraper'
+import { fetchRepoContent, convertRepoToDocuments } from '@/lib/github-service'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { KnowledgeBaseCard } from '@/components/KnowledgeBaseCard'
@@ -13,6 +15,7 @@ import { DocumentViewerDialog } from '@/components/DocumentViewerDialog'
 import { QueryInterface } from '@/components/QueryInterface'
 import { QueryHistory } from '@/components/QueryHistory'
 import { AzureSettingsDialog } from '@/components/AzureSettingsDialog'
+import { ChunkVisualizerDialog } from '@/components/ChunkVisualizerDialog'
 import { Database, Plus, ArrowLeft, ChartBar, MagnifyingGlass, FileText, Gear, Lightning } from '@phosphor-icons/react'
 import { toast, Toaster } from 'sonner'
 import { motion } from 'framer-motion'
@@ -37,6 +40,8 @@ function App() {
   const [showDocumentViewer, setShowDocumentViewer] = useState(false)
   const [showAzureSettings, setShowAzureSettings] = useState(false)
   const [syncingToAzure, setSyncingToAzure] = useState(false)
+  const [showChunkVisualizer, setShowChunkVisualizer] = useState(false)
+  const [visualizerDocument, setVisualizerDocument] = useState<Document | null>(null)
   
   const kbs = knowledgeBases || []
   const docs = documents || []
@@ -89,64 +94,85 @@ function App() {
   const handleAddContent = async (sourceType: SourceType, sourceUrl: string) => {
     if (!selectedKB) return
     
-    const extracted = simulateDocumentExtraction(sourceType, sourceUrl)
-    const newDoc: Document = {
-      id: generateId(),
-      title: extracted.title!,
-      content: extracted.content!,
-      sourceType,
-      sourceUrl,
-      addedAt: Date.now(),
-      metadata: extracted.metadata!
-    }
+    toast.info('Processing content...')
     
-    setDocuments((current) => [...(current || []), newDoc])
-    
-    if (selectedKB.azureSearchEnabled && selectedKB.azureIndexName && azureSettings?.enabled) {
-      try {
-        const service = new AzureSearchService({
-          endpoint: azureSettings.endpoint,
-          apiKey: azureSettings.apiKey,
-          indexName: selectedKB.azureIndexName,
-        })
-        await service.indexDocuments([newDoc])
-        toast.success('Content indexed in Azure AI Search')
-      } catch (error) {
-        toast.error('Failed to index in Azure: ' + (error instanceof Error ? error.message : 'Unknown error'))
+    try {
+      let documentsToAdd: Omit<Document, 'id' | 'addedAt'>[] = []
+      
+      if (sourceType === 'web') {
+        const scraped = await scrapeWebContent(sourceUrl)
+        documentsToAdd = [convertWebToDocument(scraped, sourceUrl)]
+      } else if (sourceType === 'github') {
+        const repoContent = await fetchRepoContent(sourceUrl)
+        documentsToAdd = convertRepoToDocuments(repoContent, sourceUrl)
+      } else {
+        const extracted = simulateDocumentExtraction(sourceType, sourceUrl)
+        documentsToAdd = [{
+          title: extracted.title!,
+          content: extracted.content!,
+          sourceType,
+          sourceUrl,
+          metadata: extracted.metadata!
+        }]
       }
-    }
-    
-    setKnowledgeBases((current) =>
-      (current || []).map(kb => {
-        if (kb.id === selectedKB.id) {
-          const updatedSources = kb.sources.includes(sourceType) 
-            ? kb.sources 
-            : [...kb.sources, sourceType]
-          return {
-            ...kb,
-            documentCount: kb.documentCount + 1,
-            sources: updatedSources,
-            updatedAt: Date.now()
-          }
+      
+      const newDocs: Document[] = documentsToAdd.map(doc => ({
+        ...doc,
+        id: generateId(),
+        addedAt: Date.now()
+      }))
+      
+      setDocuments((current) => [...(current || []), ...newDocs])
+      
+      if (selectedKB.azureSearchEnabled && selectedKB.azureIndexName && azureSettings?.enabled) {
+        try {
+          const service = new AzureSearchService({
+            endpoint: azureSettings.endpoint,
+            apiKey: azureSettings.apiKey,
+            indexName: selectedKB.azureIndexName,
+          })
+          await service.indexDocuments(newDocs)
+          toast.success(`${newDocs.length} document(s) indexed in Azure AI Search`)
+        } catch (error) {
+          toast.error('Failed to index in Azure: ' + (error instanceof Error ? error.message : 'Unknown error'))
         }
-        return kb
-      })
-    )
-    
-    setSelectedKB((current) => {
-      if (!current) return null
-      const updatedSources = current.sources.includes(sourceType) 
-        ? current.sources 
-        : [...current.sources, sourceType]
-      return {
-        ...current,
-        documentCount: current.documentCount + 1,
-        sources: updatedSources,
-        updatedAt: Date.now()
       }
-    })
-    
-    toast.success('Content added successfully')
+      
+      setKnowledgeBases((current) =>
+        (current || []).map(kb => {
+          if (kb.id === selectedKB.id) {
+            const updatedSources = kb.sources.includes(sourceType) 
+              ? kb.sources 
+              : [...kb.sources, sourceType]
+            return {
+              ...kb,
+              documentCount: kb.documentCount + newDocs.length,
+              sources: updatedSources,
+              updatedAt: Date.now()
+            }
+          }
+          return kb
+        })
+      )
+      
+      setSelectedKB((current) => {
+        if (!current) return null
+        const updatedSources = current.sources.includes(sourceType) 
+          ? current.sources 
+          : [...current.sources, sourceType]
+        return {
+          ...current,
+          documentCount: current.documentCount + newDocs.length,
+          sources: updatedSources,
+          updatedAt: Date.now()
+        }
+      })
+      
+      toast.success(`${newDocs.length} document(s) added successfully`)
+    } catch (error) {
+      toast.error('Failed to add content: ' + (error instanceof Error ? error.message : 'Unknown error'))
+      throw error
+    }
   }
   
   const handleDeleteDocument = (id: string) => {
@@ -175,6 +201,11 @@ function App() {
   const handleViewDocument = (document: Document) => {
     setViewingDocument(document)
     setShowDocumentViewer(true)
+  }
+  
+  const handleViewChunks = (document: Document) => {
+    setVisualizerDocument(document)
+    setShowChunkVisualizer(true)
   }
   
   const handleEditDocument = (document: Document) => {
@@ -418,6 +449,7 @@ function App() {
                       onDelete={handleDeleteDocument}
                       onView={handleViewDocument}
                       onEdit={handleEditDocument}
+                      onViewChunks={handleViewChunks}
                     />
                   </motion.div>
                 ))}
@@ -522,6 +554,12 @@ function App() {
         onOpenChange={setShowAzureSettings}
         settings={azureSettings || { endpoint: '', apiKey: '', enabled: false }}
         onSave={handleSaveAzureSettings}
+      />
+      
+      <ChunkVisualizerDialog
+        document={visualizerDocument}
+        open={showChunkVisualizer}
+        onOpenChange={setShowChunkVisualizer}
       />
     </div>
   )

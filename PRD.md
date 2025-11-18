@@ -1,14 +1,14 @@
 # Planning Guide
 
-A knowledge base management system that allows users to create, organize, and query custom RAG (Retrieval-Augmented Generation) indexes from multiple data sources including web content, documents, and simulated repository ingestion, with optional Azure AI Search integration for enhanced semantic search capabilities.
+A knowledge base management system that allows users to create, organize, and query custom RAG (Retrieval-Augmented Generation) indexes from multiple data sources including real web scraping, GitHub repository ingestion, and cloud storage, with Azure AI Search integration for enhanced semantic search and document chunking visualization capabilities.
 
 **Experience Qualities**:
 1. **Professional** - Enterprise-grade interface that conveys trust and reliability for managing critical knowledge assets
 2. **Efficient** - Streamlined workflows that minimize clicks between creating indexes, ingesting content, and retrieving answers
-3. **Intelligent** - Smart search and AI-powered responses that feel contextually aware and accurate, with optional cloud-powered vector search
+3. **Intelligent** - Smart search and AI-powered responses that feel contextually aware and accurate, with cloud-powered vector search and embedding visualization
 
 **Complexity Level**: Complex Application (advanced functionality, accounts)
-  - Multiple interconnected features including knowledge base management, document ingestion, search interfaces, and AI-powered querying with persistent state across sessions, plus optional Azure AI Search integration
+  - Multiple interconnected features including knowledge base management, real document ingestion from web and GitHub, search interfaces, AI-powered querying with persistent state across sessions, Azure AI Search integration, and document chunking with embedding visualization
 
 ## Essential Features
 
@@ -19,15 +19,36 @@ A knowledge base management system that allows users to create, organize, and qu
 - **Progression**: Click Create → Enter name/description → Select data sources → Configure settings → Save → View in dashboard
 - **Success criteria**: Knowledge base appears in list, can be edited/deleted, persists across sessions
 
-### Document Ingestion
-- **Functionality**: Add content to knowledge bases through multiple simulated source types (web URLs, file uploads, repository connections)
-- **Purpose**: Build comprehensive indexes from diverse content sources for RAG queries
+### Document Ingestion (Real Implementation)
+- **Functionality**: Add content to knowledge bases through real web scraping, GitHub API integration, and simulated cloud storage sources
+- **Purpose**: Build comprehensive indexes from diverse content sources for RAG queries with actual data extraction
 - **Trigger**: User selects a knowledge base and clicks "Add Content"
-- **Progression**: Select knowledge base → Choose source type (Web/GitHub/OneDrive/Dropbox) → Provide URL or upload → Process content → Confirm addition → View indexed documents
-- **Success criteria**: Content appears in document list, metadata extracted, searchable within knowledge base
+- **Progression**: Select knowledge base → Choose source type (Web/GitHub/OneDrive/Dropbox) → Provide URL → System fetches and parses content → Extract metadata → Confirm addition → View indexed documents
+- **Success criteria**: Real web content extracted with proper parsing, GitHub repositories fetched via API with file contents, metadata extracted, searchable within knowledge base
+
+### Real Web Scraping
+- **Functionality**: Fetch and parse actual web pages, extracting title, main content, and metadata
+- **Purpose**: Enable real-world knowledge base building from public web sources
+- **Trigger**: User provides web URL in add content dialog
+- **Progression**: Enter URL → Fetch HTML → Parse with DOMParser → Extract article content → Remove unwanted elements → Convert to markdown → Index document
+- **Success criteria**: Properly extracts main content, removes navigation/ads, preserves semantic structure, handles errors gracefully
+
+### GitHub Repository Ingestion
+- **Functionality**: Connect to GitHub API to fetch repository structure and file contents
+- **Purpose**: Index source code, documentation, and technical content from GitHub repositories
+- **Trigger**: User provides GitHub repository URL
+- **Progression**: Parse GitHub URL → Fetch repo tree via API → Filter supported file types → Fetch file contents → Group by directory → Create multiple documents → Index all content
+- **Success criteria**: Fetches up to 50 files per repo, supports multiple languages, preserves code structure, groups logically by directory
+
+### Document Chunking & Embedding Visualization
+- **Functionality**: Visualize how documents are split into chunks and their semantic embeddings in 2D space
+- **Purpose**: Help users understand chunking strategies and semantic relationships between content pieces
+- **Trigger**: User clicks "View Chunks" button on a document
+- **Progression**: Click visualize → Select chunking strategy → System chunks document → Generate embeddings → Display chunk list and 2D projection → Show similarity scores between chunks
+- **Success criteria**: Multiple chunking strategies available (fixed, sentence, paragraph, semantic), embeddings visualized in 2D space, similarity calculations between chunks, interactive selection
 
 ### Intelligent Search & Query
-- **Functionality**: Natural language search with AI-powered responses using LLM and indexed content, with optional Azure AI Search for semantic vector search
+- **Functionality**: Natural language search with AI-powered responses using LLM and indexed content, with Azure AI Search for semantic vector search
 - **Purpose**: Retrieve contextually relevant answers from knowledge bases using RAG methodology with enhanced relevance scoring
 - **Trigger**: User enters question in search interface
 - **Progression**: Enter query → System searches relevant knowledge bases (via simulated search or Azure AI Search) → LLM generates response with source citations → Display answer with references and relevance scores → Option to refine query
@@ -41,11 +62,11 @@ A knowledge base management system that allows users to create, organize, and qu
 - **Success criteria**: Connection tests successfully, indexes are created automatically, documents sync to Azure, queries show relevance scores, better search results than simulated mode
 
 ### Source Management
-- **Functionality**: View, filter, and manage all indexed documents and their metadata
-- **Purpose**: Maintain visibility and control over what content is indexed
+- **Functionality**: View, filter, and manage all indexed documents and their metadata with visualization capabilities
+- **Purpose**: Maintain visibility and control over what content is indexed and how it's chunked
 - **Trigger**: User navigates to knowledge base details
-- **Progression**: Select knowledge base → View document list → Filter by source type → Review metadata → Option to remove documents → Changes reflected immediately
-- **Success criteria**: All documents visible with metadata, filtering works, removal updates index
+- **Progression**: Select knowledge base → View document list → Filter by source type → Review metadata → View chunks and embeddings → Option to remove documents → Changes reflected immediately
+- **Success criteria**: All documents visible with metadata, filtering works, removal updates index, chunking visualization available
 
 ### Query History & Analytics
 - **Functionality**: Track all queries made, responses generated, and usage patterns
@@ -56,14 +77,19 @@ A knowledge base management system that allows users to create, organize, and qu
 
 ## Edge Case Handling
 - **Empty Knowledge Bases**: Guide users with helpful empty states suggesting first actions to take
-- **Long Document Processing**: Show progress indicators and allow background processing simulation
-- **Duplicate Content**: Detect and warn when adding similar content to prevent index pollution
+- **Long Document Processing**: Show progress indicators during real web scraping and GitHub API calls
+- **Fetch Failures**: Handle network errors, CORS issues, and rate limits gracefully with clear error messages
+- **Large Repositories**: Limit to 50 files per repository to prevent overwhelming the system
+- **Large Files**: Truncate files over 100KB to prevent memory issues
+- **Malformed HTML**: Robust parsing that handles broken HTML gracefully
 - **Invalid URLs**: Validate and provide clear error messages for malformed or inaccessible sources
 - **Query Failures**: Gracefully handle cases where LLM cannot generate good responses with fallback messages
 - **Large Knowledge Bases**: Implement pagination and virtual scrolling for performance with many documents
 - **Azure Connection Failures**: Handle network errors gracefully, fall back to simulated search if Azure is unavailable
 - **API Key Security**: Mask API keys in UI, validate credentials before saving
 - **Index Naming Conflicts**: Generate unique index names automatically to prevent collisions
+- **Embedding Generation Failures**: Fall back to simulated embeddings when LLM calls fail
+- **Chunk Visualization with Many Chunks**: Handle documents with 50+ chunks efficiently
 
 ## Design Direction
 The design should feel professional, technical, and trustworthy like enterprise AI platforms (think Notion AI meets Azure Portal) with a clean, data-dense interface that prioritizes information hierarchy and efficient workflows over decorative elements.

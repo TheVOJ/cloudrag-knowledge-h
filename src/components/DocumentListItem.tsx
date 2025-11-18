@@ -2,7 +2,7 @@ import { Document } from '@/lib/types'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { FileText, Trash, Link, Eye, Pencil } from '@phosphor-icons/react'
+import { FileText, Trash, Link, Eye, Pencil, ChartScatter } from '@phosphor-icons/react'
 import { formatDate, getSourceIcon, getSourceLabel, extractDomain } from '@/lib/helpers'
 
 interface DocumentListItemProps {
@@ -10,9 +10,10 @@ interface DocumentListItemProps {
   onDelete: (id: string) => void
   onView: (document: Document) => void
   onEdit: (document: Document) => void
+  onViewChunks?: (document: Document) => void
 }
 
-export function DocumentListItem({ document, onDelete, onView, onEdit }: DocumentListItemProps) {
+export function DocumentListItem({ document, onDelete, onView, onEdit, onViewChunks }: DocumentListItemProps) {
   return (
     <Card className="p-4 hover:bg-accent/5 transition-colors">
       <div className="flex items-start justify-between gap-4">
@@ -68,6 +69,17 @@ export function DocumentListItem({ document, onDelete, onView, onEdit }: Documen
           >
             <Pencil size={16} />
           </Button>
+          {onViewChunks && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hover:bg-secondary/10"
+              onClick={() => onViewChunks(document)}
+              title="View chunks & embeddings"
+            >
+              <ChartScatter size={16} />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

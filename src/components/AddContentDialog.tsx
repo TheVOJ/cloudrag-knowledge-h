@@ -7,11 +7,13 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { SourceType } from '@/lib/types'
 import { getSourceIcon, getSourceLabel } from '@/lib/helpers'
 import { Progress } from '@/components/ui/progress'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Warning } from '@phosphor-icons/react'
 
 interface AddContentDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onAdd: (sourceType: SourceType, sourceUrl: string) => void
+  onAdd: (sourceType: SourceType, sourceUrl: string) => Promise<void>
 }
 
 export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialogProps) {
@@ -19,30 +21,50 @@ export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialog
   const [url, setUrl] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const [statusMessage, setStatusMessage] = useState<string>('')
   
   const handleSubmit = async () => {
-    if (url.trim()) {
-      setIsProcessing(true)
-      setProgress(0)
+    if (!url.trim()) return
+    
+    setIsProcessing(true)
+    setProgress(10)
+    setError(null)
+    setStatusMessage('Connecting...')
+    
+    const progressInterval = setInterval(() => {
+      setProgress(prev => {
+        if (prev < 90) return prev + 10
+        return prev
+      })
+    }, 200)
+    
+    try {
+      if (sourceType === 'web') {
+        setStatusMessage('Fetching web content...')
+      } else if (sourceType === 'github') {
+        setStatusMessage('Fetching repository files...')
+      } else {
+        setStatusMessage('Processing content...')
+      }
       
-      const interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(interval)
-            return 100
-          }
-          return prev + 10
-        })
-      }, 100)
-      
+      await onAdd(sourceType, url)
+      clearInterval(progressInterval)
+      setUrl('')
+      setProgress(100)
+      setStatusMessage('Complete!')
       setTimeout(() => {
-        clearInterval(interval)
-        onAdd(sourceType, url)
-        setUrl('')
+        onOpenChange(false)
         setIsProcessing(false)
         setProgress(0)
-        onOpenChange(false)
-      }, 1200)
+        setStatusMessage('')
+      }, 500)
+    } catch (err) {
+      clearInterval(progressInterval)
+      setError(err instanceof Error ? err.message : 'Failed to add content')
+      setIsProcessing(false)
+      setProgress(0)
+      setStatusMessage('')
     }
   }
   
@@ -96,10 +118,17 @@ export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialog
                 </p>
               </div>
               
+              {error && (
+                <Alert variant="destructive">
+                  <Warning size={16} />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              
               {isProcessing && (
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Processing content...</span>
+                    <span className="text-muted-foreground">{statusMessage}</span>
                     <span className="font-medium">{progress}%</span>
                   </div>
                   <Progress value={progress} />
