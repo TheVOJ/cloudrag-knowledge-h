@@ -4,6 +4,16 @@ import { RetrievalExecutor, RetrievalResult } from './retrieval-executor'
 import { SelfReflectiveRAG, SelfEvaluation, CriticFeedback } from './self-reflective-rag'
 import { StrategyPerformanceTracker } from './strategy-performance-tracker'
 
+export type ProgressStep = {
+  phase: 'routing' | 'retrieval' | 'generation' | 'evaluation' | 'criticism' | 'retry' | 'complete'
+  status: 'pending' | 'in_progress' | 'complete' | 'error'
+  message: string
+  details?: string
+  progress?: number
+  timestamp: number
+  metadata?: Record<string, any>
+}
+
 export type AgenticRAGResponse = {
   answer: string
   sources: string[]
@@ -27,6 +37,7 @@ export type AgenticRAGConfig = {
   enableCriticism?: boolean
   enableAutoRetry?: boolean
   topK?: number
+  onProgress?: (step: ProgressStep) => void
 }
 
 export class AgenticRAGOrchestrator {
@@ -52,6 +63,15 @@ export class AgenticRAGOrchestrator {
     this.tracker = new StrategyPerformanceTracker()
   }
   
+  private emitProgress(config: AgenticRAGConfig, step: Omit<ProgressStep, 'timestamp'>) {
+    if (config.onProgress) {
+      config.onProgress({
+        ...step,
+        timestamp: Date.now()
+      })
+    }
+  }
+
   async query(
     userQuery: string,
     config: AgenticRAGConfig = {}
@@ -74,6 +94,14 @@ export class AgenticRAGOrchestrator {
     while (iteration < maxIterations) {
       iteration++
       
+      this.emitProgress(config, {
+        phase: 'routing',
+        status: 'in_progress',
+        message: `Analyzing query (Iteration ${iteration}/${maxIterations})`,
+        details: 'Understanding query intent, complexity, and optimal strategy...',
+        progress: 10
+      })
+      
       routing = await this.router.routeQuery(
         currentQuery,
         this.knowledgeBaseName,
@@ -81,7 +109,28 @@ export class AgenticRAGOrchestrator {
         this.conversationHistory
       )
       
+      this.emitProgress(config, {
+        phase: 'routing',
+        status: 'complete',
+        message: 'Query analysis complete',
+        details: `Intent: ${routing.intent}, Strategy: ${routing.strategy}`,
+        progress: 20,
+        metadata: {
+          intent: routing.intent,
+          strategy: routing.strategy,
+          needsRetrieval: routing.needsRetrieval
+        }
+      })
+      
       if (iteration === 1) {
+        this.emitProgress(config, {
+          phase: 'routing',
+          status: 'in_progress',
+          message: 'Checking historical performance',
+          details: 'Analyzing past queries to optimize strategy selection...',
+          progress: 25
+        })
+        
         const recommendation = await this.tracker.getStrategyRecommendation(
           currentQuery,
           routing.intent,
@@ -91,10 +140,27 @@ export class AgenticRAGOrchestrator {
         if (recommendation.basedOnHistoricalData && recommendation.confidence > 0.7) {
           routing.strategy = recommendation.recommendedStrategy
           routing.reasoning = `${routing.reasoning} (Using learned strategy: ${recommendation.reasoning})`
+          
+          this.emitProgress(config, {
+            phase: 'routing',
+            status: 'complete',
+            message: 'Strategy optimized from learning',
+            details: `Using ${recommendation.recommendedStrategy} based on ${recommendation.confidence.toFixed(0)}% confidence from historical data`,
+            progress: 30,
+            metadata: { learned: true, strategy: recommendation.recommendedStrategy }
+          })
         }
       }
       
       if (routing.intent === 'chitchat' || !routing.needsRetrieval) {
+        this.emitProgress(config, {
+          phase: 'generation',
+          status: 'in_progress',
+          message: 'Generating direct response',
+          details: 'No retrieval needed for this query type',
+          progress: 60
+        })
+        
         answer = await this.generateDirectAnswer(currentQuery, routing.intent)
         
         evaluation = {
@@ -106,11 +172,35 @@ export class AgenticRAGOrchestrator {
           reasoning: 'Direct answer without retrieval'
         }
         
+        this.emitProgress(config, {
+          phase: 'complete',
+          status: 'complete',
+          message: 'Response generated',
+          progress: 100
+        })
+        
         break
       }
       
+      this.emitProgress(config, {
+        phase: 'routing',
+        status: 'in_progress',
+        message: 'Checking if clarification needed',
+        details: 'Evaluating query clarity and specificity...',
+        progress: 32
+      })
+      
       const clarification = await this.router.shouldClarify(currentQuery, this.documents.length)
       if (clarification.needsClarification && iteration === 1) {
+        this.emitProgress(config, {
+          phase: 'routing',
+          status: 'complete',
+          message: 'Clarification needed',
+          details: 'Query is too vague or ambiguous',
+          progress: 100,
+          metadata: { needsClarification: true }
+        })
+        
         answer = clarification.clarificationQuestion || 'Could you please provide more details about your question?'
         
         evaluation = {
@@ -136,9 +226,43 @@ export class AgenticRAGOrchestrator {
       let subQueries: string[] | undefined
       if (routing.strategy === 'multi_query' && routing.subQueries) {
         subQueries = routing.subQueries
+        
+        this.emitProgress(config, {
+          phase: 'retrieval',
+          status: 'in_progress',
+          message: 'Breaking down complex query',
+          details: `Generated ${subQueries.length} sub-queries for comprehensive retrieval`,
+          progress: 35,
+          metadata: { subQueries }
+        })
       } else if (routing.strategy === 'multi_query') {
+        this.emitProgress(config, {
+          phase: 'retrieval',
+          status: 'in_progress',
+          message: 'Generating sub-queries',
+          details: 'Breaking complex query into simpler components...',
+          progress: 35
+        })
+        
         subQueries = await this.router.generateSubQueries(currentQuery)
+        
+        this.emitProgress(config, {
+          phase: 'retrieval',
+          status: 'complete',
+          message: 'Sub-queries generated',
+          details: `Created ${subQueries.length} targeted queries`,
+          progress: 40,
+          metadata: { subQueries }
+        })
       }
+      
+      this.emitProgress(config, {
+        phase: 'retrieval',
+        status: 'in_progress',
+        message: `Executing ${routing.strategy} retrieval`,
+        details: `Searching ${this.documents.length} documents with top-${topK} results...`,
+        progress: 45
+      })
       
       retrieval = await this.executor.executeRetrieval(
         currentQuery,
@@ -148,6 +272,26 @@ export class AgenticRAGOrchestrator {
         subQueries
       )
       
+      this.emitProgress(config, {
+        phase: 'retrieval',
+        status: 'complete',
+        message: `Retrieved ${retrieval.documents.length} documents`,
+        details: `${routing.strategy} strategy found ${retrieval.documents.length} relevant documents`,
+        progress: 55,
+        metadata: {
+          documentsFound: retrieval.documents.length,
+          method: retrieval.method
+        }
+      })
+      
+      this.emitProgress(config, {
+        phase: 'retrieval',
+        status: 'in_progress',
+        message: 'Evaluating retrieval quality',
+        details: 'Checking document relevance and coverage...',
+        progress: 58
+      })
+      
       const qualityCheck = this.router.evaluateRetrievalQuality(
         retrieval.documents,
         currentQuery,
@@ -155,6 +299,15 @@ export class AgenticRAGOrchestrator {
       )
       
       if (qualityCheck.needsFallback && routing.fallbackStrategies && iteration < maxIterations) {
+        this.emitProgress(config, {
+          phase: 'retrieval',
+          status: 'in_progress',
+          message: 'Trying fallback strategy',
+          details: `Initial results insufficient, using ${routing.fallbackStrategies[0]} strategy...`,
+          progress: 62,
+          metadata: { fallbackStrategy: routing.fallbackStrategies[0] }
+        })
+        
         const fallbackStrategy = routing.fallbackStrategies[0]
         
         retrieval = await this.executor.executeRetrieval(
@@ -163,9 +316,43 @@ export class AgenticRAGOrchestrator {
           fallbackStrategy,
           topK
         )
+        
+        this.emitProgress(config, {
+          phase: 'retrieval',
+          status: 'complete',
+          message: 'Fallback retrieval complete',
+          details: `Found ${retrieval.documents.length} documents using fallback strategy`,
+          progress: 65,
+          metadata: { documentsFound: retrieval.documents.length }
+        })
       }
       
+      this.emitProgress(config, {
+        phase: 'generation',
+        status: 'in_progress',
+        message: 'Generating response',
+        details: 'Synthesizing information from retrieved documents...',
+        progress: 70
+      })
+      
       answer = await this.generateAnswer(currentQuery, retrieval)
+      
+      this.emitProgress(config, {
+        phase: 'generation',
+        status: 'complete',
+        message: 'Response generated',
+        details: `Generated ${answer.length} character response`,
+        progress: 78,
+        metadata: { responseLength: answer.length }
+      })
+      
+      this.emitProgress(config, {
+        phase: 'evaluation',
+        status: 'in_progress',
+        message: 'Self-evaluating response quality',
+        details: 'Checking relevance, support, and utility...',
+        progress: 80
+      })
       
       evaluation = await this.reflector.performSelfEvaluation(
         currentQuery,
@@ -173,28 +360,111 @@ export class AgenticRAGOrchestrator {
         retrieval
       )
       
+      this.emitProgress(config, {
+        phase: 'evaluation',
+        status: 'complete',
+        message: `Quality assessment: ${(evaluation.confidence * 100).toFixed(0)}% confidence`,
+        details: `Relevance: ${evaluation.relevanceToken}, Support: ${evaluation.supportToken}`,
+        progress: 85,
+        metadata: {
+          confidence: evaluation.confidence,
+          relevance: evaluation.relevanceToken,
+          support: evaluation.supportToken
+        }
+      })
+      
       if (enableCriticism) {
+        this.emitProgress(config, {
+          phase: 'criticism',
+          status: 'in_progress',
+          message: 'Running critic analysis',
+          details: 'Checking logical consistency, accuracy, and completeness...',
+          progress: 88
+        })
+        
         criticism = await this.reflector.criticResponse(
           currentQuery,
           answer,
           retrieval.documents
         )
+        
+        this.emitProgress(config, {
+          phase: 'criticism',
+          status: 'complete',
+          message: 'Critic analysis complete',
+          details: `Logic: ${(criticism.logicalConsistency * 100).toFixed(0)}%, Accuracy: ${(criticism.factualAccuracy * 100).toFixed(0)}%`,
+          progress: 92,
+          metadata: {
+            logicalConsistency: criticism.logicalConsistency,
+            factualAccuracy: criticism.factualAccuracy,
+            completeness: criticism.completeness
+          }
+        })
       }
       
       if (evaluation.confidence >= confidenceThreshold || !enableAutoRetry) {
+        this.emitProgress(config, {
+          phase: 'complete',
+          status: 'complete',
+          message: 'Response meets quality threshold',
+          details: `Completed in ${iteration} iteration(s)`,
+          progress: 100,
+          metadata: { iterations: iteration }
+        })
         break
       }
       
       if (iteration < maxIterations && evaluation.needsRetry) {
+        this.emitProgress(config, {
+          phase: 'retry',
+          status: 'in_progress',
+          message: 'Quality below threshold, analyzing improvements',
+          details: 'Determining if retry can improve response...',
+          progress: 94
+        })
+        
         const improvements = await this.reflector.suggestImprovements(evaluation, criticism)
         
         if (improvements.shouldRetry) {
+          this.emitProgress(config, {
+            phase: 'retry',
+            status: 'in_progress',
+            message: `Retrying with improved query (${iteration + 1}/${maxIterations})`,
+            details: `Improvements: ${improvements.actions.slice(0, 2).join(', ')}`,
+            progress: 96,
+            metadata: { improvements: improvements.actions }
+          })
+          
           currentQuery = await this.reformulateQuery(userQuery, evaluation, improvements.actions)
+          
+          this.emitProgress(config, {
+            phase: 'retry',
+            status: 'complete',
+            message: 'Query reformulated',
+            details: 'Starting new iteration with improved query...',
+            progress: 5
+          })
+          
           continue
         } else {
+          this.emitProgress(config, {
+            phase: 'complete',
+            status: 'complete',
+            message: 'Response finalized',
+            details: 'No further improvements possible',
+            progress: 100
+          })
           break
         }
       } else {
+        this.emitProgress(config, {
+          phase: 'complete',
+          status: 'complete',
+          message: 'Maximum iterations reached',
+          details: `Completed after ${iteration} iteration(s)`,
+          progress: 100,
+          metadata: { iterations: iteration }
+        })
         break
       }
     }

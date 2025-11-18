@@ -18,11 +18,14 @@ import {
   FlowArrow,
   ThumbsUp,
   ThumbsDown,
-  Minus
+  Minus,
+  Circle,
+  CircleNotch,
+  Check
 } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Document, AzureSearchSettings } from '@/lib/types'
-import { AgenticRAGOrchestrator, AgenticRAGResponse } from '@/lib/agentic-rag-orchestrator'
+import { AgenticRAGOrchestrator, AgenticRAGResponse, ProgressStep } from '@/lib/agentic-rag-orchestrator'
 import { StrategyPerformanceTracker } from '@/lib/strategy-performance-tracker'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -52,6 +55,8 @@ export function AgenticQueryInterface({
   const [queryId, setQueryId] = useState<string>('')
   const [userFeedback, setUserFeedback] = useState<'positive' | 'negative' | 'neutral' | null>(null)
   const [tracker] = useState(() => new StrategyPerformanceTracker())
+  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([])
+  const [currentProgress, setCurrentProgress] = useState(0)
   
   useEffect(() => {
     if (!response?.answer) {
@@ -80,6 +85,8 @@ export function AgenticQueryInterface({
     setResponse(null)
     setDisplayedText('')
     setUserFeedback(null)
+    setProgressSteps([])
+    setCurrentProgress(0)
     
     try {
       const orchestrator = new AgenticRAGOrchestrator(
@@ -94,7 +101,13 @@ export function AgenticQueryInterface({
         confidenceThreshold: 0.6,
         enableCriticism: true,
         enableAutoRetry: true,
-        topK: 5
+        topK: 5,
+        onProgress: (step: ProgressStep) => {
+          setProgressSteps(prev => [...prev, step])
+          if (step.progress !== undefined) {
+            setCurrentProgress(step.progress)
+          }
+        }
       })
       
       setResponse(result)
@@ -180,6 +193,35 @@ export function AgenticQueryInterface({
     }
   }
   
+  const getPhaseIcon = (phase: ProgressStep['phase'], status: ProgressStep['status']) => {
+    const iconProps = { size: 16, className: 'flex-shrink-0' }
+    
+    if (status === 'complete') {
+      return <CheckCircle {...iconProps} weight="fill" className="text-green-600 flex-shrink-0" />
+    } else if (status === 'in_progress') {
+      return <CircleNotch {...iconProps} className="animate-spin text-accent flex-shrink-0" />
+    } else if (status === 'error') {
+      return <WarningCircle {...iconProps} weight="fill" className="text-destructive flex-shrink-0" />
+    }
+    
+    switch (phase) {
+      case 'routing':
+        return <TreeStructure {...iconProps} weight="duotone" className="text-muted-foreground flex-shrink-0" />
+      case 'retrieval':
+        return <MagnifyingGlass {...iconProps} weight="duotone" className="text-muted-foreground flex-shrink-0" />
+      case 'generation':
+        return <Sparkle {...iconProps} weight="duotone" className="text-muted-foreground flex-shrink-0" />
+      case 'evaluation':
+        return <CheckCircle {...iconProps} weight="duotone" className="text-muted-foreground flex-shrink-0" />
+      case 'criticism':
+        return <Brain {...iconProps} weight="duotone" className="text-muted-foreground flex-shrink-0" />
+      case 'retry':
+        return <ArrowsClockwise {...iconProps} weight="duotone" className="text-muted-foreground flex-shrink-0" />
+      default:
+        return <Circle {...iconProps} className="text-muted-foreground flex-shrink-0" />
+    }
+  }
+  
   const getRelevanceColor = (token: string) => {
     switch (token) {
       case 'RELEVANT': return 'text-green-600'
@@ -231,34 +273,112 @@ export function AgenticQueryInterface({
           transition={{ duration: 0.3 }}
         >
           <Card className="p-4 sm:p-6">
-            <div className="space-y-3 sm:space-y-4">
-              <div className="flex items-center gap-2">
-                <Brain size={18} className="sm:w-5 sm:h-5 text-accent animate-pulse" weight="duotone" />
-                <span className="font-semibold text-sm sm:text-base">Agent Processing</span>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Brain size={18} className="sm:w-5 sm:h-5 text-accent" weight="duotone" />
+                  <span className="font-semibold text-sm sm:text-base">Agent Processing</span>
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  {currentProgress}%
+                </Badge>
               </div>
-              <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-accent animate-pulse flex-shrink-0"></div>
-                  <span className="hidden sm:inline">Analyzing query intent and complexity...</span>
-                  <span className="sm:hidden">Analyzing query...</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-accent animate-pulse flex-shrink-0"></div>
-                  <span className="hidden sm:inline">Selecting optimal retrieval strategy...</span>
-                  <span className="sm:hidden">Selecting strategy...</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-accent animate-pulse flex-shrink-0"></div>
-                  <span className="hidden sm:inline">Executing multi-stage retrieval...</span>
-                  <span className="sm:hidden">Retrieving data...</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-accent animate-pulse flex-shrink-0"></div>
-                  <span className="hidden sm:inline">Generating and evaluating response...</span>
-                  <span className="sm:hidden">Generating response...</span>
-                </div>
+              
+              <Progress value={currentProgress} className="h-2" />
+              
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                {[
+                  { phase: 'routing', label: 'Routing', icon: TreeStructure },
+                  { phase: 'retrieval', label: 'Retrieval', icon: MagnifyingGlass },
+                  { phase: 'generation', label: 'Generation', icon: Sparkle },
+                  { phase: 'evaluation', label: 'Evaluation', icon: CheckCircle },
+                  { phase: 'complete', label: 'Complete', icon: Check }
+                ].map(({ phase, label, icon: Icon }) => {
+                  const phaseSteps = progressSteps.filter(s => s.phase === phase)
+                  const hasCompleted = phaseSteps.some(s => s.status === 'complete')
+                  const isInProgress = phaseSteps.some(s => s.status === 'in_progress')
+                  
+                  return (
+                    <div 
+                      key={phase}
+                      className={`p-2 rounded-lg flex flex-col items-center gap-1 transition-all ${
+                        hasCompleted 
+                          ? 'bg-green-500/10 border border-green-500/30' 
+                          : isInProgress
+                            ? 'bg-accent/10 border border-accent/30'
+                            : 'bg-muted/30 border border-transparent'
+                      }`}
+                    >
+                      <Icon 
+                        size={16} 
+                        weight={hasCompleted ? 'fill' : 'regular'}
+                        className={`${
+                          hasCompleted 
+                            ? 'text-green-600' 
+                            : isInProgress 
+                              ? 'text-accent animate-pulse' 
+                              : 'text-muted-foreground'
+                        }`}
+                      />
+                      <div className="capitalize font-medium text-center">{label}</div>
+                    </div>
+                  )
+                })}
               </div>
-              <Progress value={undefined} className="h-1" />
+              
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                <AnimatePresence mode="popLayout">
+                  {progressSteps.map((step, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      transition={{ duration: 0.2 }}
+                      className="flex flex-col gap-1 p-2 rounded-lg bg-muted/30"
+                    >
+                      <div className="flex items-start gap-2">
+                        {getPhaseIcon(step.phase, step.status)}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs sm:text-sm font-medium">
+                              {step.message}
+                            </span>
+                            {step.metadata && Object.keys(step.metadata).length > 0 && (
+                              <Badge variant="outline" className="text-xs">
+                                {step.phase}
+                              </Badge>
+                            )}
+                          </div>
+                          {step.details && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {step.details}
+                            </p>
+                          )}
+                          {step.metadata?.subQueries && (
+                            <div className="mt-1 space-y-0.5">
+                              {(step.metadata.subQueries as string[]).slice(0, 3).map((sq, i) => (
+                                <div key={i} className="text-xs text-muted-foreground pl-4 border-l-2 border-accent/30">
+                                  {i + 1}. {sq}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+              
+              {progressSteps.length === 0 && (
+                <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-accent animate-pulse flex-shrink-0"></div>
+                    <span>Initializing agentic workflow...</span>
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
         </motion.div>
@@ -359,14 +479,122 @@ export function AgenticQueryInterface({
                 </CollapsibleTrigger>
                 
                 <CollapsibleContent>
-                  <Tabs defaultValue="flow" className="mt-3 sm:mt-4">
-                    <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 text-xs">
+                  <Tabs defaultValue="progress" className="mt-3 sm:mt-4">
+                    <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 text-xs">
+                      <TabsTrigger value="progress" className="text-xs">Progress</TabsTrigger>
                       <TabsTrigger value="flow" className="text-xs">Flow</TabsTrigger>
                       <TabsTrigger value="routing" className="text-xs hidden sm:flex">Routing</TabsTrigger>
                       <TabsTrigger value="retrieval" className="text-xs">Retrieval</TabsTrigger>
                       <TabsTrigger value="evaluation" className="text-xs hidden sm:flex">Evaluation</TabsTrigger>
                       <TabsTrigger value="meta" className="text-xs">Meta</TabsTrigger>
                     </TabsList>
+                    
+                    <TabsContent value="progress" className="mt-4 space-y-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                        <div className="p-2 rounded-lg bg-muted/50 text-center">
+                          <div className="text-xs text-muted-foreground">Total Steps</div>
+                          <div className="text-lg font-semibold">{progressSteps.length}</div>
+                        </div>
+                        <div className="p-2 rounded-lg bg-muted/50 text-center">
+                          <div className="text-xs text-muted-foreground">Iterations</div>
+                          <div className="text-lg font-semibold">{response.iterations}</div>
+                        </div>
+                        <div className="p-2 rounded-lg bg-muted/50 text-center">
+                          <div className="text-xs text-muted-foreground">Time</div>
+                          <div className="text-lg font-semibold">{response.metadata.totalTimeMs}ms</div>
+                        </div>
+                        <div className="p-2 rounded-lg bg-muted/50 text-center">
+                          <div className="text-xs text-muted-foreground">Success Rate</div>
+                          <div className="text-lg font-semibold">{(response.evaluation.confidence * 100).toFixed(0)}%</div>
+                        </div>
+                      </div>
+                      
+                      <div className="text-sm text-muted-foreground mb-2">
+                        Detailed execution timeline:
+                      </div>
+                      <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                        {progressSteps.map((step, index) => (
+                          <motion.div
+                            key={index}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.05 }}
+                            className="flex flex-col gap-1 p-3 rounded-lg border bg-card"
+                          >
+                            <div className="flex items-start gap-2">
+                              {getPhaseIcon(step.phase, step.status)}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap justify-between">
+                                  <span className="text-xs sm:text-sm font-medium">
+                                    {step.message}
+                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    {step.progress !== undefined && (
+                                      <Badge variant="outline" className="text-xs">
+                                        {step.progress}%
+                                      </Badge>
+                                    )}
+                                    <Badge variant="secondary" className="text-xs capitalize">
+                                      {step.phase}
+                                    </Badge>
+                                  </div>
+                                </div>
+                                {step.details && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {step.details}
+                                  </p>
+                                )}
+                                {step.metadata && Object.keys(step.metadata).length > 0 && (
+                                  <div className="mt-2 p-2 bg-muted/50 rounded text-xs space-y-1">
+                                    {step.metadata.intent && (
+                                      <div><span className="font-medium">Intent:</span> {step.metadata.intent as string}</div>
+                                    )}
+                                    {step.metadata.strategy && (
+                                      <div><span className="font-medium">Strategy:</span> {step.metadata.strategy as string}</div>
+                                    )}
+                                    {step.metadata.documentsFound !== undefined && (
+                                      <div><span className="font-medium">Documents Found:</span> {step.metadata.documentsFound as number}</div>
+                                    )}
+                                    {step.metadata.confidence !== undefined && (
+                                      <div><span className="font-medium">Confidence:</span> {((step.metadata.confidence as number) * 100).toFixed(0)}%</div>
+                                    )}
+                                    {step.metadata.subQueries && (
+                                      <div>
+                                        <div className="font-medium mb-1">Sub-queries:</div>
+                                        <div className="space-y-0.5 pl-2">
+                                          {(step.metadata.subQueries as string[]).map((sq, i) => (
+                                            <div key={i} className="border-l-2 border-accent/30 pl-2">
+                                              {i + 1}. {sq}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {step.metadata.improvements && (
+                                      <div>
+                                        <div className="font-medium mb-1">Improvements:</div>
+                                        <div className="space-y-0.5 pl-2">
+                                          {(step.metadata.improvements as string[]).map((imp, i) => (
+                                            <div key={i} className="border-l-2 border-yellow-500/30 pl-2">
+                                              • {imp}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                      {progressSteps.length === 0 && (
+                        <div className="text-center py-8 text-sm text-muted-foreground">
+                          No progress data available
+                        </div>
+                      )}
+                    </TabsContent>
                     
                     <TabsContent value="flow" className="mt-4">
                       <AgenticFlowDiagram response={response} />

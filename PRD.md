@@ -48,18 +48,18 @@ A knowledge base management system that allows users to create, organize, and qu
 - **Success criteria**: Multiple chunking strategies available (fixed, sentence, paragraph, semantic), embeddings visualized in 2D space, similarity calculations between chunks, interactive selection
 
 ### Intelligent Search & Query
-- **Functionality**: Natural language search with AI-powered responses using LLM and indexed content, with Azure AI Search for semantic vector search. Supports both standard RAG and advanced agentic RAG with intelligent routing.
-- **Purpose**: Retrieve contextually relevant answers from knowledge bases using RAG methodology with enhanced relevance scoring, and provide transparent insight into AI decision-making processes
+- **Functionality**: Natural language search with AI-powered responses using LLM and indexed content, with Azure AI Search for semantic vector search. Supports both standard RAG and advanced agentic RAG with intelligent routing and granular progress visualization.
+- **Purpose**: Retrieve contextually relevant answers from knowledge bases using RAG methodology with enhanced relevance scoring, and provide transparent insight into AI decision-making processes with real-time progress feedback
 - **Trigger**: User enters question in search interface
-- **Progression**: Enter query → User selects Standard or Agentic mode → System analyzes intent (agentic only) → Routes to optimal strategy (semantic/keyword/hybrid/multi-query/RAG fusion) → Executes retrieval → LLM generates response with source citations → Self-evaluates quality (agentic only) → Displays answer with optional detailed agent breakdown → Auto-corrects if confidence low
-- **Success criteria**: Responses reference indexed content, include source citations with relevance scores when using Azure Search, feel contextually accurate. In agentic mode: shows intent classification, retrieval strategy selection, confidence scores, self-evaluation tokens, and improvement suggestions when needed.
+- **Progression**: Enter query → User selects Standard or Agentic mode → System analyzes intent (agentic only) → Routes to optimal strategy (semantic/keyword/hybrid/multi-query/RAG fusion) → Shows granular progress steps → Executes retrieval → LLM generates response with source citations → Self-evaluates quality (agentic only) → Displays answer with detailed agent breakdown and progress timeline → Auto-corrects if confidence low
+- **Success criteria**: Responses reference indexed content, include source citations with relevance scores when using Azure Search, feel contextually accurate. In agentic mode: shows intent classification, retrieval strategy selection, confidence scores, self-evaluation tokens, real-time progress updates for each phase, and improvement suggestions when needed.
 
 ### Agentic RAG Query Routing
-- **Functionality**: Intelligent agent-based query routing that analyzes query intent, selects optimal retrieval strategies, performs multi-stage retrieval with self-evaluation, and auto-corrects low-confidence responses
-- **Purpose**: Transform simple one-shot RAG into adaptive, self-improving retrieval system that makes intelligent decisions about how to answer queries
+- **Functionality**: Intelligent agent-based query routing that analyzes query intent, selects optimal retrieval strategies, performs multi-stage retrieval with self-evaluation, and auto-corrects low-confidence responses with granular progress tracking
+- **Purpose**: Transform simple one-shot RAG into adaptive, self-improving retrieval system that makes intelligent decisions about how to answer queries while providing complete transparency through detailed progress reporting
 - **Trigger**: User selects "Agentic" mode toggle in query interface
-- **Progression**: Enter query → Agent classifies intent (factual/analytical/comparative/procedural/clarification/chitchat/out_of_scope) → Analyzes query complexity, specificity, and scope → Routes to optimal strategy (semantic/keyword/hybrid/multi_query/rag_fusion) → Executes retrieval with quality evaluation → Generates response → Self-evaluates with reflection tokens (RELEVANT/SUPPORTED/USEFUL) → Optional critic feedback on logic/accuracy/completeness → If confidence low, automatically reformulates and retries → Returns answer with full transparency of decision path
-- **Success criteria**: Intent correctly classified, appropriate strategy selected, multi-iteration refinement when needed, high confidence final answers, transparent decision trail visible in agent details panel
+- **Progression**: Enter query → Agent classifies intent (with progress update) → Analyzes query complexity (with progress update) → Routes to optimal strategy (with progress update) → Shows historical learning if applicable → Checks clarification needs → Generates sub-queries if needed → Executes retrieval with quality evaluation (with progress updates) → Shows fallback if triggered → Generates response (with progress update) → Self-evaluates with reflection tokens (with progress update) → Optional critic feedback (with progress update) → If confidence low, shows reformulation and retry → Returns answer with full transparency of decision path and complete progress timeline
+- **Success criteria**: Intent correctly classified, appropriate strategy selected, multi-iteration refinement when needed, high confidence final answers, transparent decision trail visible in agent details panel, granular progress updates showing each step with timing, metadata, and status indicators, phase completion visualization, detailed timeline available after completion
 
 ### Query Intent Classification
 - **Functionality**: LLM-based classification of user queries into intent categories to guide retrieval strategy selection
@@ -95,6 +95,13 @@ A knowledge base management system that allows users to create, organize, and qu
 - **Trigger**: Low confidence score (<0.6) or poor retrieval quality detected
 - **Progression**: Initial query fails quality check → System analyzes failure reasons → LLM reformulates query to address issues (e.g., add specificity, break into sub-queries, expand context) → Retry with reformulated query → Repeat until confidence threshold met or max iterations reached
 - **Success criteria**: Reformulations improve results, iterative refinement visible in metadata, final answers have higher confidence than initial attempts, system stops when quality acceptable
+
+### Granular Progress Visualization
+- **Functionality**: Real-time progress tracking and visualization that shows each step of the agentic RAG pipeline as it executes, with phase indicators, detailed messages, metadata, and a complete timeline
+- **Purpose**: Provide users with transparency into how the AI agent processes their query, building trust and understanding of the system's decision-making process
+- **Trigger**: Any query submitted in agentic mode
+- **Progression**: Query starts → Progress bar updates with percentage → Phase indicators show routing/retrieval/generation/evaluation/complete status with icons → Each step displays with icon (spinning for in-progress, checkmark for complete) → Detailed message explains what's happening → Additional metadata shown (sub-queries, document counts, confidence scores, improvements) → Steps animate in as they occur → Complete timeline available in agent details panel after completion → Summary metrics show total steps, iterations, time, and success rate
+- **Success criteria**: Progress updates in real-time during execution, phase completion clearly indicated with visual feedback, detailed information available for each step, metadata rendered appropriately (sub-queries indented, improvements highlighted), timeline persists after completion for review, smooth animations between states, mobile-responsive layout
 
 ### Azure AI Search Integration
 - **Functionality**: Configure and connect Azure Cognitive Search service for enhanced semantic search and vector-based retrieval
