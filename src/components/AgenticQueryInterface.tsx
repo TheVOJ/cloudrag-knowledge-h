@@ -190,31 +190,37 @@ export function AgenticQueryInterface({
   }
   
   return (
-    <div className="space-y-4">
-      <Card className="p-4">
-        <div className="flex gap-2">
+    <div className="space-y-3 sm:space-y-4">
+      <Card className="p-3 sm:p-4">
+        <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <MagnifyingGlass 
-              size={20} 
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" 
+              size={18} 
+              className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-muted-foreground" 
             />
             <Input
-              placeholder={`Ask anything about ${knowledgeBaseName}... (powered by Agentic RAG)`}
+              placeholder={`Ask ${knowledgeBaseName}... (Agentic RAG)`}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAgenticSearch()}
-              className="pl-10"
+              className="pl-9 sm:pl-10 text-sm sm:text-base h-10 sm:h-11"
               disabled={isLoading}
             />
           </div>
-          <Button onClick={handleAgenticSearch} disabled={!query.trim() || isLoading} className="gap-2">
+          <Button 
+            onClick={handleAgenticSearch} 
+            disabled={!query.trim() || isLoading} 
+            className="gap-2 w-full sm:w-auto flex-shrink-0 h-10 sm:h-11"
+            size="default"
+          >
             <Brain size={16} weight="duotone" />
-            {isLoading ? 'Thinking...' : 'Ask Agent'}
+            <span>{isLoading ? 'Thinking...' : 'Ask Agent'}</span>
           </Button>
         </div>
         <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-          <Brain size={12} className="text-accent" weight="fill" />
-          Agentic RAG: Intelligent routing, multi-strategy retrieval, self-evaluation & auto-correction
+          <Brain size={12} className="text-accent flex-shrink-0" weight="fill" />
+          <span className="hidden sm:inline">Agentic RAG: Intelligent routing, multi-strategy retrieval, self-evaluation & auto-correction</span>
+          <span className="sm:hidden">Intelligent multi-strategy AI agent</span>
         </div>
       </Card>
       
@@ -224,28 +230,32 @@ export function AgenticQueryInterface({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <Card className="p-6">
-            <div className="space-y-4">
+          <Card className="p-4 sm:p-6">
+            <div className="space-y-3 sm:space-y-4">
               <div className="flex items-center gap-2">
-                <Brain size={20} className="text-accent animate-pulse" weight="duotone" />
-                <span className="font-semibold">Agent Processing</span>
+                <Brain size={18} className="sm:w-5 sm:h-5 text-accent animate-pulse" weight="duotone" />
+                <span className="font-semibold text-sm sm:text-base">Agent Processing</span>
               </div>
-              <div className="space-y-2 text-sm text-muted-foreground">
+              <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-accent animate-pulse"></div>
-                  Analyzing query intent and complexity...
+                  <div className="w-2 h-2 rounded-full bg-accent animate-pulse flex-shrink-0"></div>
+                  <span className="hidden sm:inline">Analyzing query intent and complexity...</span>
+                  <span className="sm:hidden">Analyzing query...</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-accent animate-pulse"></div>
-                  Selecting optimal retrieval strategy...
+                  <div className="w-2 h-2 rounded-full bg-accent animate-pulse flex-shrink-0"></div>
+                  <span className="hidden sm:inline">Selecting optimal retrieval strategy...</span>
+                  <span className="sm:hidden">Selecting strategy...</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-accent animate-pulse"></div>
-                  Executing multi-stage retrieval...
+                  <div className="w-2 h-2 rounded-full bg-accent animate-pulse flex-shrink-0"></div>
+                  <span className="hidden sm:inline">Executing multi-stage retrieval...</span>
+                  <span className="sm:hidden">Retrieving data...</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-accent animate-pulse"></div>
-                  Generating and evaluating response...
+                  <div className="w-2 h-2 rounded-full bg-accent animate-pulse flex-shrink-0"></div>
+                  <span className="hidden sm:inline">Generating and evaluating response...</span>
+                  <span className="sm:hidden">Generating response...</span>
                 </div>
               </div>
               <Progress value={undefined} className="h-1" />
@@ -262,41 +272,41 @@ export function AgenticQueryInterface({
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.3 }}
           >
-            <Card className="p-6">
-              <div className="flex items-center justify-between mb-4">
+            <Card className="p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-3 sm:mb-4">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center">
-                    <Sparkle size={16} className="text-accent" weight="duotone" />
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                    <Sparkle size={14} className="sm:w-4 sm:h-4 text-accent" weight="duotone" />
                   </div>
-                  <h3 className="font-semibold">Agentic Response</h3>
+                  <h3 className="font-semibold text-sm sm:text-base">Agentic Response</h3>
                 </div>
                 {getConfidenceBadge(response.evaluation.confidence)}
               </div>
               
-              <div className="mb-4">
-                <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
-                  <FlowArrow size={14} weight="duotone" />
+              <div className="mb-3 sm:mb-4">
+                <div className="flex items-center gap-2 mb-2 sm:mb-3 text-xs text-muted-foreground">
+                  <FlowArrow size={14} weight="duotone" className="flex-shrink-0" />
                   <span>Query Flow:</span>
                 </div>
                 <AgenticFlowDiagram response={response} compact />
               </div>
               
-              <div className="prose prose-sm max-w-none mb-4">
-                <p className="text-foreground leading-relaxed whitespace-pre-wrap">{displayedText}</p>
+              <div className="prose prose-sm max-w-none mb-3 sm:mb-4">
+                <p className="text-sm sm:text-base text-foreground leading-relaxed whitespace-pre-wrap">{displayedText}</p>
               </div>
               
-              <Separator className="my-4" />
+              <Separator className="my-3 sm:my-4" />
               
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-3 sm:mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Was this response helpful?</span>
+                  <span className="text-xs sm:text-sm text-muted-foreground">Was this response helpful?</span>
                 </div>
                 <div className="flex gap-2">
                   <Button
                     variant={userFeedback === 'positive' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => handleFeedback('positive')}
-                    className="gap-1"
+                    className="gap-1 h-8 text-xs"
                   >
                     <ThumbsUp size={14} weight={userFeedback === 'positive' ? 'fill' : 'regular'} />
                     Helpful
@@ -305,29 +315,29 @@ export function AgenticQueryInterface({
                     variant={userFeedback === 'neutral' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => handleFeedback('neutral')}
-                    className="gap-1"
+                    className="gap-1 h-8 text-xs"
                   >
                     <Minus size={14} />
-                    Neutral
+                    <span className="hidden sm:inline">Neutral</span>
                   </Button>
                   <Button
                     variant={userFeedback === 'negative' ? 'destructive' : 'outline'}
                     size="sm"
                     onClick={() => handleFeedback('negative')}
-                    className="gap-1"
+                    className="gap-1 h-8 text-xs"
                   >
                     <ThumbsDown size={14} weight={userFeedback === 'negative' ? 'fill' : 'regular'} />
-                    Not Helpful
+                    <span className="hidden sm:inline">Not Helpful</span>
                   </Button>
                 </div>
               </div>
               
               {response.sources.length > 0 && (
                 <>
-                  <Separator className="my-4" />
+                  <Separator className="my-3 sm:my-4" />
                   <div>
-                    <p className="text-sm font-medium mb-2">Sources:</p>
-                    <div className="flex flex-wrap gap-2">
+                    <p className="text-xs sm:text-sm font-medium mb-2">Sources:</p>
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
                       {response.sources.map((source, index) => (
                         <Badge key={index} variant="secondary" className="text-xs">
                           [{index + 1}] {source}
@@ -338,52 +348,52 @@ export function AgenticQueryInterface({
                 </>
               )}
               
-              <Separator className="my-4" />
+              <Separator className="my-3 sm:my-4" />
               
               <Collapsible open={showDetails} onOpenChange={setShowDetails}>
                 <CollapsibleTrigger asChild>
-                  <Button variant="ghost" size="sm" className="w-full gap-2">
+                  <Button variant="ghost" size="sm" className="w-full gap-2 h-9 text-xs sm:text-sm">
                     <Info size={14} />
                     {showDetails ? 'Hide' : 'Show'} Agent Details
                   </Button>
                 </CollapsibleTrigger>
                 
                 <CollapsibleContent>
-                  <Tabs defaultValue="flow" className="mt-4">
-                    <TabsList className="grid w-full grid-cols-5">
-                      <TabsTrigger value="flow">Flow</TabsTrigger>
-                      <TabsTrigger value="routing">Routing</TabsTrigger>
-                      <TabsTrigger value="retrieval">Retrieval</TabsTrigger>
-                      <TabsTrigger value="evaluation">Evaluation</TabsTrigger>
-                      <TabsTrigger value="meta">Metadata</TabsTrigger>
+                  <Tabs defaultValue="flow" className="mt-3 sm:mt-4">
+                    <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 text-xs">
+                      <TabsTrigger value="flow" className="text-xs">Flow</TabsTrigger>
+                      <TabsTrigger value="routing" className="text-xs hidden sm:flex">Routing</TabsTrigger>
+                      <TabsTrigger value="retrieval" className="text-xs">Retrieval</TabsTrigger>
+                      <TabsTrigger value="evaluation" className="text-xs hidden sm:flex">Evaluation</TabsTrigger>
+                      <TabsTrigger value="meta" className="text-xs">Meta</TabsTrigger>
                     </TabsList>
                     
                     <TabsContent value="flow" className="mt-4">
                       <AgenticFlowDiagram response={response} />
                     </TabsContent>
                     
-                    <TabsContent value="routing" className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3 text-sm">
+                    <TabsContent value="routing" className="space-y-2 sm:space-y-3 mt-3 sm:mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm">
                         <div>
-                          <span className="text-muted-foreground">Intent:</span>
+                          <span className="text-muted-foreground text-xs sm:text-sm">Intent:</span>
                           <div className="flex items-center gap-1 mt-1">
                             {getIntentIcon(response.routing.intent)}
-                            <Badge variant="outline">{response.routing.intent}</Badge>
+                            <Badge variant="outline" className="text-xs">{response.routing.intent}</Badge>
                           </div>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Strategy:</span>
-                          <Badge variant="outline" className="mt-1">{response.routing.strategy}</Badge>
+                          <span className="text-muted-foreground text-xs sm:text-sm">Strategy:</span>
+                          <Badge variant="outline" className="mt-1 text-xs">{response.routing.strategy}</Badge>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Needs Retrieval:</span>
-                          <Badge variant={response.routing.needsRetrieval ? 'default' : 'secondary'} className="mt-1">
+                          <span className="text-muted-foreground text-xs sm:text-sm">Needs Retrieval:</span>
+                          <Badge variant={response.routing.needsRetrieval ? 'default' : 'secondary'} className="mt-1 text-xs">
                             {response.routing.needsRetrieval ? 'Yes' : 'No'}
                           </Badge>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Parallelizable:</span>
-                          <Badge variant={response.routing.parallelizable ? 'default' : 'secondary'} className="mt-1">
+                          <span className="text-muted-foreground text-xs sm:text-sm">Parallelizable:</span>
+                          <Badge variant={response.routing.parallelizable ? 'default' : 'secondary'} className="mt-1 text-xs">
                             {response.routing.parallelizable ? 'Yes' : 'No'}
                           </Badge>
                         </div>

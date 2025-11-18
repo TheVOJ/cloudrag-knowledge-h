@@ -83,25 +83,25 @@ export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialog
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add Content to Knowledge Base</DialogTitle>
+          <DialogTitle className="text-lg sm:text-xl">Add Content to Knowledge Base</DialogTitle>
         </DialogHeader>
         
         <Tabs value={sourceType} onValueChange={(v) => setSourceType(v as SourceType)}>
           <TabsList className="grid grid-cols-4 w-full">
             {(['web', 'github', 'onedrive', 'dropbox'] as SourceType[]).map((type) => (
-              <TabsTrigger key={type} value={type} className="gap-2">
-                <span>{getSourceIcon(type)}</span>
+              <TabsTrigger key={type} value={type} className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3">
+                <span className="text-sm sm:text-base">{getSourceIcon(type)}</span>
                 <span className="hidden sm:inline">{getSourceLabel(type).split(' ')[0]}</span>
               </TabsTrigger>
             ))}
           </TabsList>
           
           {(['web', 'github', 'onedrive', 'dropbox'] as SourceType[]).map((type) => (
-            <TabsContent key={type} value={type} className="space-y-4">
+            <TabsContent key={type} value={type} className="space-y-3 sm:space-y-4">
               <div className="space-y-2">
-                <Label htmlFor={`${type}-url`}>Source URL or Path</Label>
+                <Label htmlFor={`${type}-url`} className="text-sm">Source URL or Path</Label>
                 <Input
                   id={`${type}-url`}
                   placeholder={getPlaceholder()}
@@ -109,6 +109,7 @@ export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialog
                   onChange={(e) => setUrl(e.target.value)}
                   disabled={isProcessing}
                   onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                  className="text-sm sm:text-base"
                 />
                 <p className="text-xs text-muted-foreground">
                   {type === 'web' && 'Enter a URL to crawl and index web content'}
@@ -120,16 +121,16 @@ export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialog
               
               {error && (
                 <Alert variant="destructive">
-                  <Warning size={16} />
-                  <AlertDescription>{error}</AlertDescription>
+                  <Warning size={16} className="flex-shrink-0" />
+                  <AlertDescription className="text-sm break-words">{error}</AlertDescription>
                 </Alert>
               )}
               
               {isProcessing && (
                 <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{statusMessage}</span>
-                    <span className="font-medium">{progress}%</span>
+                  <div className="flex justify-between text-xs sm:text-sm">
+                    <span className="text-muted-foreground truncate flex-1 mr-2">{statusMessage}</span>
+                    <span className="font-medium flex-shrink-0">{progress}%</span>
                   </div>
                   <Progress value={progress} />
                 </div>
@@ -138,11 +139,11 @@ export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialog
           ))}
         </Tabs>
         
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isProcessing}>
+        <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isProcessing} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!url.trim() || isProcessing}>
+          <Button onClick={handleSubmit} disabled={!url.trim() || isProcessing} className="w-full sm:w-auto">
             {isProcessing ? 'Processing...' : 'Add Content'}
           </Button>
         </DialogFooter>

@@ -288,17 +288,21 @@ function App() {
   }
   
   const renderDashboard = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight mb-2">Knowledge Bases</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-1 sm:mb-2">Knowledge Bases</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Create and manage your RAG-powered knowledge bases
           </p>
         </div>
-        <Button onClick={() => setShowCreateDialog(true)} size="lg" className="gap-2">
+        <Button 
+          onClick={() => setShowCreateDialog(true)} 
+          size="default"
+          className="gap-2 w-full sm:w-auto sm:flex-shrink-0"
+        >
           <Plus size={20} weight="bold" />
-          Create Knowledge Base
+          <span className="sm:inline">Create Knowledge Base</span>
         </Button>
       </div>
       
@@ -306,22 +310,26 @@ function App() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center py-24"
+          className="text-center py-12 sm:py-24"
         >
-          <div className="w-20 h-20 rounded-full bg-primary/10 mx-auto mb-6 flex items-center justify-center">
-            <Database size={40} className="text-primary" weight="duotone" />
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-primary/10 mx-auto mb-4 sm:mb-6 flex items-center justify-center">
+            <Database size={32} className="sm:w-10 sm:h-10 text-primary" weight="duotone" />
           </div>
-          <h2 className="text-2xl font-semibold mb-2">No knowledge bases yet</h2>
-          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+          <h2 className="text-xl sm:text-2xl font-semibold mb-2">No knowledge bases yet</h2>
+          <p className="text-sm sm:text-base text-muted-foreground mb-4 sm:mb-6 max-w-md mx-auto px-4">
             Get started by creating your first knowledge base to organize and query your content
           </p>
-          <Button onClick={() => setShowCreateDialog(true)} size="lg" className="gap-2">
+          <Button 
+            onClick={() => setShowCreateDialog(true)} 
+            size="default"
+            className="gap-2 w-full sm:w-auto mx-4 sm:mx-0"
+          >
             <Plus size={20} weight="bold" />
             Create Your First Knowledge Base
           </Button>
         </motion.div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {kbs.map((kb) => (
             <motion.div
               key={kb.id}
@@ -347,41 +355,47 @@ function App() {
     const kbDocs = getKBDocuments(selectedKB.id)
     
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         <div>
           <Button 
             variant="ghost" 
             onClick={() => setCurrentView('dashboard')}
-            className="mb-4 gap-2"
+            className="mb-3 sm:mb-4 gap-2 -ml-2"
+            size="sm"
           >
             <ArrowLeft size={16} />
             Back to Dashboard
           </Button>
           
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight mb-2">{selectedKB.name}</h1>
-              <p className="text-muted-foreground">{selectedKB.description}</p>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4 sm:mb-6">
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-1 sm:mb-2 break-words">{selectedKB.name}</h1>
+              <p className="text-sm sm:text-base text-muted-foreground break-words">{selectedKB.description}</p>
               {selectedKB.azureSearchEnabled && (
                 <div className="flex items-center gap-2 mt-2">
-                  <Lightning size={16} weight="fill" className="text-accent" />
-                  <span className="text-sm text-muted-foreground">Azure AI Search enabled</span>
+                  <Lightning size={16} weight="fill" className="text-accent flex-shrink-0" />
+                  <span className="text-xs sm:text-sm text-muted-foreground">Azure AI Search enabled</span>
                 </div>
               )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2 sm:flex-shrink-0">
               {selectedKB.azureSearchEnabled && azureSettings?.enabled && kbDocs.length > 0 && (
                 <Button 
                   variant="outline" 
                   onClick={syncExistingDocumentsToAzure} 
                   disabled={syncingToAzure}
-                  className="gap-2"
+                  className="gap-2 w-full sm:w-auto"
+                  size="default"
                 >
                   <Lightning size={16} weight="duotone" />
                   {syncingToAzure ? 'Syncing...' : 'Sync to Azure'}
                 </Button>
               )}
-              <Button onClick={() => setShowAddContentDialog(true)} className="gap-2">
+              <Button 
+                onClick={() => setShowAddContentDialog(true)} 
+                className="gap-2 w-full sm:w-auto"
+                size="default"
+              >
                 <Plus size={20} weight="bold" />
                 Add Content
               </Button>
@@ -390,40 +404,44 @@ function App() {
         </div>
         
         <Tabs defaultValue="query" className="space-y-4">
-          <TabsList>
+          <TabsList className="w-full sm:w-auto grid grid-cols-2">
             <TabsTrigger value="query" className="gap-2">
               <MagnifyingGlass size={16} />
-              Query
+              <span className="text-xs sm:text-sm">Query</span>
             </TabsTrigger>
             <TabsTrigger value="documents" className="gap-2">
               <FileText size={16} />
-              Documents ({kbDocs.length})
+              <span className="text-xs sm:text-sm">Documents ({kbDocs.length})</span>
             </TabsTrigger>
           </TabsList>
           
           <TabsContent value="query">
             {kbDocs.length === 0 ? (
-              <div className="text-center py-16 border-2 border-dashed rounded-lg">
-                <FileText size={48} className="mx-auto mb-4 text-muted-foreground" weight="duotone" />
-                <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
-                <p className="text-sm text-muted-foreground mb-4">
+              <div className="text-center py-12 sm:py-16 border-2 border-dashed rounded-lg px-4">
+                <FileText size={40} className="sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-muted-foreground" weight="duotone" />
+                <h3 className="text-base sm:text-lg font-semibold mb-2">No documents yet</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4 max-w-sm mx-auto">
                   Add some content to this knowledge base to start querying
                 </p>
-                <Button onClick={() => setShowAddContentDialog(true)} className="gap-2">
+                <Button 
+                  onClick={() => setShowAddContentDialog(true)} 
+                  className="gap-2 w-full sm:w-auto"
+                  size="default"
+                >
                   <Plus size={16} />
                   Add Your First Document
                 </Button>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                  <div className="flex items-center gap-2 text-sm">
+              <div className="space-y-3 sm:space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 p-3 bg-muted/50 rounded-lg">
+                  <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
                     <span className="font-medium">Query Mode:</span>
                     <Button
                       variant={!agenticMode ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => setAgenticMode(false)}
-                      className="gap-1 h-8"
+                      className="gap-1 h-7 sm:h-8 text-xs"
                     >
                       <MagnifyingGlass size={14} />
                       Standard
@@ -432,7 +450,7 @@ function App() {
                       variant={agenticMode ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => setAgenticMode(true)}
-                      className="gap-1 h-8"
+                      className="gap-1 h-7 sm:h-8 text-xs"
                     >
                       <Brain size={14} weight="duotone" />
                       Agentic
@@ -440,8 +458,9 @@ function App() {
                   </div>
                   {agenticMode && (
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Brain size={12} className="text-accent" weight="fill" />
-                      Advanced multi-strategy routing with self-evaluation
+                      <Brain size={12} className="text-accent flex-shrink-0" weight="fill" />
+                      <span className="hidden sm:inline">Advanced multi-strategy routing with self-evaluation</span>
+                      <span className="sm:hidden">Multi-strategy routing</span>
                     </div>
                   )}
                 </div>
@@ -469,19 +488,23 @@ function App() {
           
           <TabsContent value="documents">
             {kbDocs.length === 0 ? (
-              <div className="text-center py-16 border-2 border-dashed rounded-lg">
-                <FileText size={48} className="mx-auto mb-4 text-muted-foreground" weight="duotone" />
-                <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
-                <p className="text-sm text-muted-foreground mb-4">
+              <div className="text-center py-12 sm:py-16 border-2 border-dashed rounded-lg px-4">
+                <FileText size={40} className="sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-muted-foreground" weight="duotone" />
+                <h3 className="text-base sm:text-lg font-semibold mb-2">No documents yet</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4 max-w-sm mx-auto">
                   Add content from various sources to build your knowledge base
                 </p>
-                <Button onClick={() => setShowAddContentDialog(true)} className="gap-2">
+                <Button 
+                  onClick={() => setShowAddContentDialog(true)} 
+                  className="gap-2 w-full sm:w-auto"
+                  size="default"
+                >
                   <Plus size={16} />
                   Add Content
                 </Button>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {kbDocs.map((doc) => (
                   <motion.div
                     key={doc.id}
@@ -529,61 +552,66 @@ function App() {
     <div className="min-h-screen bg-background">
       <Toaster position="top-right" />
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-                <Database size={24} className="text-primary-foreground" weight="duotone" />
+        <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+                <Database size={20} className="sm:hidden text-primary-foreground" weight="duotone" />
+                <Database size={24} className="hidden sm:block text-primary-foreground" weight="duotone" />
               </div>
-              <div>
-                <h1 className="font-semibold text-lg">RAG Knowledge Manager</h1>
-                <p className="text-xs text-muted-foreground">AI-Powered Search & Retrieval</p>
+              <div className="min-w-0">
+                <h1 className="font-semibold text-sm sm:text-lg truncate">RAG Knowledge Manager</h1>
+                <p className="text-xs text-muted-foreground hidden sm:block">AI-Powered Search & Retrieval</p>
               </div>
             </div>
             
-            <div className="flex gap-2">
+            <div className="flex gap-1 sm:gap-2 flex-shrink-0">
               <Button
                 variant={currentView === 'dashboard' ? 'default' : 'ghost'}
                 onClick={() => setCurrentView('dashboard')}
-                className="gap-2"
+                className="gap-1 sm:gap-2 h-8 sm:h-10 px-2 sm:px-4"
+                size="sm"
               >
-                <Database size={16} />
-                <span className="hidden sm:inline">Dashboard</span>
+                <Database size={16} className="sm:w-4 sm:h-4" />
+                <span className="hidden md:inline">Dashboard</span>
               </Button>
               <Button
                 variant={currentView === 'analytics' ? 'default' : 'ghost'}
                 onClick={() => setCurrentView('analytics')}
-                className="gap-2"
+                className="gap-1 sm:gap-2 h-8 sm:h-10 px-2 sm:px-4"
+                size="sm"
               >
-                <ChartBar size={16} />
-                <span className="hidden sm:inline">Analytics</span>
+                <ChartBar size={16} className="sm:w-4 sm:h-4" />
+                <span className="hidden md:inline">Analytics</span>
               </Button>
               <Button
                 variant={currentView === 'performance' ? 'default' : 'ghost'}
                 onClick={() => setCurrentView('performance')}
-                className="gap-2"
+                className="gap-1 sm:gap-2 h-8 sm:h-10 px-2 sm:px-4"
+                size="sm"
               >
-                <Brain size={16} weight="duotone" />
-                <span className="hidden sm:inline">Performance</span>
+                <Brain size={16} weight="duotone" className="sm:w-4 sm:h-4" />
+                <span className="hidden md:inline">Performance</span>
               </Button>
               <Button
                 variant="ghost"
                 onClick={() => setShowAzureSettings(true)}
-                className="gap-2"
+                className="gap-1 sm:gap-2 h-8 sm:h-10 px-2 sm:px-4"
+                size="sm"
               >
                 {azureSettings?.enabled ? (
-                  <Lightning size={16} weight="fill" className="text-accent" />
+                  <Lightning size={16} weight="fill" className="text-accent sm:w-4 sm:h-4" />
                 ) : (
-                  <Gear size={16} />
+                  <Gear size={16} className="sm:w-4 sm:h-4" />
                 )}
-                <span className="hidden sm:inline">Azure Search</span>
+                <span className="hidden lg:inline">Azure Search</span>
               </Button>
             </div>
           </div>
         </div>
       </header>
       
-      <main className="container mx-auto px-6 py-8">
+      <main className="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {currentView === 'dashboard' && renderDashboard()}
         {currentView === 'details' && renderDetails()}
         {currentView === 'analytics' && renderAnalytics()}
