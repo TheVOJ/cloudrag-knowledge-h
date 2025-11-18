@@ -2,6 +2,7 @@ import { Document, AzureSearchSettings } from './types'
 import { AgenticQueryRouter, RoutingDecision, QueryIntent } from './agentic-router'
 import { RetrievalExecutor, RetrievalResult } from './retrieval-executor'
 import { SelfReflectiveRAG, SelfEvaluation, CriticFeedback } from './self-reflective-rag'
+import { StrategyPerformanceTracker } from './strategy-performance-tracker'
 
 export type AgenticRAGResponse = {
   answer: string
@@ -32,6 +33,7 @@ export class AgenticRAGOrchestrator {
   private router: AgenticQueryRouter
   private executor: RetrievalExecutor
   private reflector: SelfReflectiveRAG
+  private tracker: StrategyPerformanceTracker
   private conversationHistory: Array<{ query: string; response: string }> = []
   
   constructor(
@@ -47,6 +49,7 @@ export class AgenticRAGOrchestrator {
       azureIndexName
     )
     this.reflector = new SelfReflectiveRAG()
+    this.tracker = new StrategyPerformanceTracker()
   }
   
   async query(
@@ -77,6 +80,19 @@ export class AgenticRAGOrchestrator {
         this.documents.length,
         this.conversationHistory
       )
+      
+      if (iteration === 1) {
+        const recommendation = await this.tracker.getStrategyRecommendation(
+          currentQuery,
+          routing.intent,
+          this.documents.length
+        )
+        
+        if (recommendation.basedOnHistoricalData && recommendation.confidence > 0.7) {
+          routing.strategy = recommendation.recommendedStrategy
+          routing.reasoning = `${routing.reasoning} (Using learned strategy: ${recommendation.reasoning})`
+        }
+      }
       
       if (routing.intent === 'chitchat' || !routing.needsRetrieval) {
         answer = await this.generateDirectAnswer(currentQuery, routing.intent)
@@ -196,7 +212,7 @@ export class AgenticRAGOrchestrator {
     
     const improvements = await this.reflector.suggestImprovements(evaluation, criticism)
     
-    return {
+    const response: AgenticRAGResponse = {
       answer,
       sources: retrieval.documents.map(d => d.title),
       routing,
@@ -212,6 +228,10 @@ export class AgenticRAGOrchestrator {
         improvementSuggestions: improvements.actions.length > 0 ? improvements.actions : undefined
       }
     }
+    
+    await this.tracker.recordQueryPerformance(userQuery, response)
+    
+    return response
   }
   
   private async generateDirectAnswer(query: string, intent: QueryIntent): Promise<string> {

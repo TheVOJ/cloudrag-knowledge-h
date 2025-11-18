@@ -117,6 +117,20 @@ A knowledge base management system that allows users to create, organize, and qu
 - **Progression**: Open analytics → View query history → See most common queries → Identify knowledge gaps → Take action to improve index
 - **Success criteria**: History persists, displays usage trends, helps identify missing content areas
 
+### Strategy Performance Tracking & Learning
+- **Functionality**: Autonomous system that records routing decisions, strategy effectiveness, and user feedback to continuously optimize future queries
+- **Purpose**: Enable the agentic system to learn from every interaction and improve routing decisions over time
+- **Trigger**: Automatically tracks each agentic query; user can provide explicit feedback (helpful/neutral/not helpful)
+- **Progression**: Query executed → Performance metrics recorded (confidence, iterations, time, strategy used) → User provides optional feedback → Metrics aggregated by intent/strategy combination → Historical patterns analyzed → Recommendations generated for similar future queries → Learning insights auto-generated → System adapts strategy selection based on success rates
+- **Success criteria**: Performance data persists across sessions, success rates calculated per strategy/intent, recommendations based on >3 queries, user feedback incorporated into learning, similar query detection works, improvement trends visible
+
+### Strategy Performance Dashboard
+- **Functionality**: Comprehensive visualization of routing effectiveness, success rates, confidence trends, and optimization opportunities with learning insights
+- **Purpose**: Provide transparency into the agentic system's learning progress and enable data-driven optimization
+- **Trigger**: User clicks "Performance" in main navigation
+- **Progression**: View dashboard → Review overall statistics (total queries, avg confidence, success rate, avg iterations) → Explore top 5 performing strategies → Filter metrics by intent type → Read auto-generated learning insights (strategy performance, intent patterns, failure modes, optimization opportunities) → Review recent query history with performance breakdown → Identify trends and patterns → Act on suggested improvements
+- **Success criteria**: Real-time metrics display, intent-based filtering, top performers ranked by success rate, actionable insights with impact levels, trend indicators, query-level performance visible, recommendations data-driven
+
 ## Edge Case Handling
 - **Empty Knowledge Bases**: Guide users with helpful empty states suggesting first actions to take
 - **Long Document Processing**: Show progress indicators during real web scraping and GitHub API calls

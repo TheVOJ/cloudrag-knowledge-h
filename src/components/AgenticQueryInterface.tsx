@@ -15,14 +15,19 @@ import {
   CheckCircle,
   WarningCircle,
   Info,
-  FlowArrow
+  FlowArrow,
+  ThumbsUp,
+  ThumbsDown,
+  Minus
 } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Document, AzureSearchSettings } from '@/lib/types'
 import { AgenticRAGOrchestrator, AgenticRAGResponse } from '@/lib/agentic-rag-orchestrator'
+import { StrategyPerformanceTracker } from '@/lib/strategy-performance-tracker'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { AgenticFlowDiagram } from '@/components/AgenticFlowDiagram'
+import { toast } from 'sonner'
 
 interface AgenticQueryInterfaceProps {
   knowledgeBaseName: string
@@ -44,6 +49,9 @@ export function AgenticQueryInterface({
   const [response, setResponse] = useState<AgenticRAGResponse | null>(null)
   const [displayedText, setDisplayedText] = useState('')
   const [showDetails, setShowDetails] = useState(false)
+  const [queryId, setQueryId] = useState<string>('')
+  const [userFeedback, setUserFeedback] = useState<'positive' | 'negative' | 'neutral' | null>(null)
+  const [tracker] = useState(() => new StrategyPerformanceTracker())
   
   useEffect(() => {
     if (!response?.answer) {
@@ -71,6 +79,7 @@ export function AgenticQueryInterface({
     setIsLoading(true)
     setResponse(null)
     setDisplayedText('')
+    setUserFeedback(null)
     
     try {
       const orchestrator = new AgenticRAGOrchestrator(
@@ -89,6 +98,13 @@ export function AgenticQueryInterface({
       })
       
       setResponse(result)
+      
+      const history = await tracker.getQueryHistory()
+      const latestQuery = history[history.length - 1]
+      if (latestQuery) {
+        setQueryId(latestQuery.id)
+      }
+      
       onQuery(query, result.answer, result.sources, 'agentic')
     } catch (error) {
       console.error('Agentic RAG error:', error)
@@ -128,6 +144,21 @@ export function AgenticQueryInterface({
     }
     
     setIsLoading(false)
+  }
+  
+  const handleFeedback = async (feedback: 'positive' | 'negative' | 'neutral') => {
+    if (!queryId) return
+    
+    setUserFeedback(feedback)
+    await tracker.recordUserFeedback(queryId, feedback)
+    
+    const feedbackMessages = {
+      positive: 'Thank you for the positive feedback! The system will prioritize similar strategies.',
+      negative: 'Thank you for the feedback. The system will learn from this to improve future responses.',
+      neutral: 'Feedback recorded.'
+    }
+    
+    toast.success(feedbackMessages[feedback])
   }
   
   const getIntentIcon = (intent: string) => {
@@ -252,6 +283,43 @@ export function AgenticQueryInterface({
               
               <div className="prose prose-sm max-w-none mb-4">
                 <p className="text-foreground leading-relaxed whitespace-pre-wrap">{displayedText}</p>
+              </div>
+              
+              <Separator className="my-4" />
+              
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Was this response helpful?</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant={userFeedback === 'positive' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => handleFeedback('positive')}
+                    className="gap-1"
+                  >
+                    <ThumbsUp size={14} weight={userFeedback === 'positive' ? 'fill' : 'regular'} />
+                    Helpful
+                  </Button>
+                  <Button
+                    variant={userFeedback === 'neutral' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => handleFeedback('neutral')}
+                    className="gap-1"
+                  >
+                    <Minus size={14} />
+                    Neutral
+                  </Button>
+                  <Button
+                    variant={userFeedback === 'negative' ? 'destructive' : 'outline'}
+                    size="sm"
+                    onClick={() => handleFeedback('negative')}
+                    className="gap-1"
+                  >
+                    <ThumbsDown size={14} weight={userFeedback === 'negative' ? 'fill' : 'regular'} />
+                    Not Helpful
+                  </Button>
+                </div>
               </div>
               
               {response.sources.length > 0 && (

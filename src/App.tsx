@@ -17,11 +17,12 @@ import { AgenticQueryInterface } from '@/components/AgenticQueryInterface'
 import { QueryHistory } from '@/components/QueryHistory'
 import { AzureSettingsDialog } from '@/components/AzureSettingsDialog'
 import { ChunkVisualizerDialog } from '@/components/ChunkVisualizerDialog'
+import { StrategyPerformanceDashboard } from '@/components/StrategyPerformanceDashboard'
 import { Database, Plus, ArrowLeft, ChartBar, MagnifyingGlass, FileText, Gear, Lightning, Brain } from '@phosphor-icons/react'
 import { toast, Toaster } from 'sonner'
 import { motion } from 'framer-motion'
 
-type View = 'dashboard' | 'details' | 'analytics'
+type View = 'dashboard' | 'details' | 'analytics' | 'performance'
 
 function App() {
   const [knowledgeBases, setKnowledgeBases] = useKV<KnowledgeBase[]>('knowledge-bases', [])
@@ -518,6 +519,12 @@ function App() {
     </div>
   )
   
+  const renderPerformance = () => (
+    <div className="space-y-6">
+      <StrategyPerformanceDashboard />
+    </div>
+  )
+  
   return (
     <div className="min-h-screen bg-background">
       <Toaster position="top-right" />
@@ -552,6 +559,14 @@ function App() {
                 <span className="hidden sm:inline">Analytics</span>
               </Button>
               <Button
+                variant={currentView === 'performance' ? 'default' : 'ghost'}
+                onClick={() => setCurrentView('performance')}
+                className="gap-2"
+              >
+                <Brain size={16} weight="duotone" />
+                <span className="hidden sm:inline">Performance</span>
+              </Button>
+              <Button
                 variant="ghost"
                 onClick={() => setShowAzureSettings(true)}
                 className="gap-2"
@@ -572,6 +587,7 @@ function App() {
         {currentView === 'dashboard' && renderDashboard()}
         {currentView === 'details' && renderDetails()}
         {currentView === 'analytics' && renderAnalytics()}
+        {currentView === 'performance' && renderPerformance()}
       </main>
       
       <CreateKnowledgeBaseDialog
