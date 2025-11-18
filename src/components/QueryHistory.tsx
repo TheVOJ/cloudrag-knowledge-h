@@ -20,6 +20,11 @@ export function QueryHistory({ queries, knowledgeBases }: QueryHistoryProps) {
   const [selectedKB, setSelectedKB] = useState<string>('all')
   const [groupBy, setGroupBy] = useState<GroupBy>('none')
 
+  const getKnowledgeBaseName = (kbId: string) => {
+    const kb = knowledgeBases.find(k => k.id === kbId)
+    return kb?.name || 'Unknown'
+  }
+
   const filteredQueries = useMemo(() => {
     let filtered = [...queries]
 
@@ -96,12 +101,7 @@ export function QueryHistory({ queries, knowledgeBases }: QueryHistoryProps) {
       topKBs,
       recentTrend
     }
-  }, [filteredQueries])
-
-  const getKnowledgeBaseName = (kbId: string) => {
-    const kb = knowledgeBases.find(k => k.id === kbId)
-    return kb?.name || 'Unknown'
-  }
+  }, [filteredQueries, getKnowledgeBaseName])
 
   const groupedQueries = useMemo(() => {
     if (groupBy === 'none') {
