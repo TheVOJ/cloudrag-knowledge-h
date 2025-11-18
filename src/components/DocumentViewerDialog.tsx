@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Document } from '@/lib/types'
 import {
   Dialog,
@@ -15,8 +15,9 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Pencil, FloppyDisk, X, Eye, Link } from '@phosphor-icons/react'
+import { Pencil, FloppyDisk, X, Eye, Link, Code } from '@phosphor-icons/react'
 import { getSourceIcon, getSourceLabel, formatDate, extractDomain } from '@/lib/helpers'
+import { marked } from 'marked'
 
 interface DocumentViewerDialogProps {
   document: Document | null
@@ -34,12 +35,23 @@ export function DocumentViewerDialog({
   const [isEditing, setIsEditing] = useState(false)
   const [editedTitle, setEditedTitle] = useState('')
   const [editedContent, setEditedContent] = useState('')
+  const [viewMode, setViewMode] = useState<'markdown' | 'raw'>('markdown')
+
+  const renderedMarkdown = useMemo(() => {
+    if (!document || viewMode === 'raw') return null
+    try {
+      return marked.parse(document.content, { async: false }) as string
+    } catch {
+      return null
+    }
+  }, [document?.content, viewMode])
 
   const handleOpen = (isOpen: boolean) => {
     if (isOpen && document) {
       setEditedTitle(document.title)
       setEditedContent(document.content)
       setIsEditing(false)
+      setViewMode('markdown')
     }
     onOpenChange(isOpen)
   }
@@ -115,7 +127,30 @@ export function DocumentViewerDialog({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="view" className="flex-1 mt-4 min-h-0">
+          <TabsContent value="view" className="flex-1 mt-4 min-h-0 space-y-3">
+            {!isEditing && (
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  variant={viewMode === 'markdown' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('markdown')}
+                  className="gap-2"
+                >
+                  <Eye size={14} />
+                  Markdown
+                </Button>
+                <Button
+                  variant={viewMode === 'raw' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('raw')}
+                  className="gap-2"
+                >
+                  <Code size={14} />
+                  Raw
+                </Button>
+              </div>
+            )}
+            
             {isEditing ? (
               <Textarea
                 value={editedContent}
@@ -124,10 +159,17 @@ export function DocumentViewerDialog({
                 placeholder="Document content"
               />
             ) : (
-              <ScrollArea className="h-[400px] rounded-lg border p-4">
-                <div className="prose prose-sm max-w-none whitespace-pre-wrap">
-                  {document.content}
-                </div>
+              <ScrollArea className="h-[400px] rounded-lg border">
+                {viewMode === 'markdown' && renderedMarkdown ? (
+                  <div 
+                    className="prose prose-sm max-w-none p-6 prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-p:text-foreground prose-headings:text-foreground prose-a:text-primary prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-li:text-foreground"
+                    dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
+                  />
+                ) : (
+                  <div className="p-6 font-mono text-sm whitespace-pre-wrap text-foreground">
+                    {document.content}
+                  </div>
+                )}
               </ScrollArea>
             )}
           </TabsContent>

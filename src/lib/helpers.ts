@@ -58,9 +58,43 @@ export function simulateDocumentExtraction(sourceType: SourceType, sourceUrl: st
     dropbox: `File from Dropbox`
   }
   
+  const markdownContent = `# ${titles[sourceType]}
+
+## Overview
+
+This is **simulated content** extracted from a *${sourceType}* source. In a real implementation, this would contain the actual indexed content from:
+
+\`\`\`
+${sourceUrl}
+\`\`\`
+
+## Key Features
+
+- Supports markdown rendering
+- View in **Markdown** or **Raw** mode
+- Edit documents inline
+- Persistent storage
+
+## Content Details
+
+The document extraction process would:
+
+1. Fetch content from the source
+2. Parse and clean the data
+3. Extract metadata
+4. Index for vector search
+
+### Technical Implementation
+
+This RAG system uses \`spark.llm\` for intelligent query processing and retrieval augmented generation.
+
+> This is a demonstration of how documents would appear when ingested into the knowledge base.
+
+For more information, visit the [source](${sourceUrl}).`
+  
   return {
     title: titles[sourceType],
-    content: `Simulated content extracted from ${sourceType} source: ${sourceUrl}. This would contain the actual indexed content in a real implementation.`,
+    content: markdownContent,
     metadata: {
       size: Math.floor(Math.random() * 50000) + 1000,
       lastModified: Date.now(),
