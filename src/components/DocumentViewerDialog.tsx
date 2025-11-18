@@ -46,7 +46,7 @@ export function DocumentViewerDialog({
   const renderedMarkdown = useMemo(() => {
     if (!document) return ''
     try {
-      return marked.parse(document.content)
+      return marked(document.content) as string
     } catch {
       return document.content
     }

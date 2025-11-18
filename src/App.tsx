@@ -12,7 +12,7 @@ import { DocumentViewerDialog } from '@/components/DocumentViewerDialog'
 import { QueryInterface } from '@/components/QueryInterface'
 import { QueryHistory } from '@/components/QueryHistory'
 import { Database, Plus, ArrowLeft, ChartBar, MagnifyingGlass, FileText } from '@phosphor-icons/react'
-import { toast } from 'sonner'
+import { toast, Toaster } from 'sonner'
 import { motion } from 'framer-motion'
 
 type View = 'dashboard' | 'details' | 'analytics'
@@ -351,6 +351,7 @@ function App() {
   
   return (
     <div className="min-h-screen bg-background">
+      <Toaster position="top-right" />
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
