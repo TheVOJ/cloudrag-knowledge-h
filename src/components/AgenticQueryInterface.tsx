@@ -31,6 +31,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { AgenticFlowDiagram } from '@/components/AgenticFlowDiagram'
 import { QueryReformulationGraph, QueryReformulationData } from '@/components/QueryReformulationGraph'
+import { QuerySimilarityMatrix } from '@/components/QuerySimilarityMatrix'
 import { toast } from 'sonner'
 
 interface AgenticQueryInterfaceProps {
@@ -58,6 +59,30 @@ export function AgenticQueryInterface({
   const [tracker] = useState(() => new StrategyPerformanceTracker())
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([])
   const [currentProgress, setCurrentProgress] = useState(0)
+  
+  const calculateSemanticSimilarity = (query1: string, query2: string): number => {
+    const words1 = query1.toLowerCase().split(/\s+/).filter(w => w.length > 3)
+    const words2 = query2.toLowerCase().split(/\s+/).filter(w => w.length > 3)
+    
+    if (words1.length === 0 || words2.length === 0) return 0
+    
+    const set1 = new Set(words1)
+    const set2 = new Set(words2)
+    const intersection = new Set([...set1].filter(x => set2.has(x)))
+    const union = new Set([...set1, ...set2])
+    
+    const jaccardSimilarity = intersection.size / union.size
+    
+    const longerLength = Math.max(query1.length, query2.length)
+    const shorterLength = Math.min(query1.length, query2.length)
+    const lengthSimilarity = shorterLength / longerLength
+    
+    const commonStarts = query1.toLowerCase().startsWith(query2.toLowerCase().substring(0, 5)) ||
+                         query2.toLowerCase().startsWith(query1.toLowerCase().substring(0, 5))
+    const positionBonus = commonStarts ? 0.15 : 0
+    
+    return Math.min(1, jaccardSimilarity * 0.7 + lengthSimilarity * 0.3 + positionBonus)
+  }
   
   useEffect(() => {
     if (!response?.answer) {
@@ -482,9 +507,10 @@ export function AgenticQueryInterface({
                 
                 <CollapsibleContent>
                   <Tabs defaultValue="progress" className="mt-3 sm:mt-4">
-                    <TabsList className="grid w-full grid-cols-3 sm:grid-cols-7 text-xs">
+                    <TabsList className="grid w-full grid-cols-3 sm:grid-cols-8 text-xs">
                       <TabsTrigger value="progress" className="text-xs">Progress</TabsTrigger>
-                      <TabsTrigger value="reformulations" className="text-xs">Queries</TabsTrigger>
+                      <TabsTrigger value="reformulations" className="text-xs">Graph</TabsTrigger>
+                      <TabsTrigger value="similarity" className="text-xs">Similarity</TabsTrigger>
                       <TabsTrigger value="flow" className="text-xs">Flow</TabsTrigger>
                       <TabsTrigger value="routing" className="text-xs hidden sm:flex">Routing</TabsTrigger>
                       <TabsTrigger value="retrieval" className="text-xs">Retrieval</TabsTrigger>
@@ -609,9 +635,21 @@ export function AgenticQueryInterface({
                               source: r.parentId!,
                               target: r.id,
                               type: r.linkType!,
-                              reasoning: r.reasoning
+                              reasoning: r.reasoning,
+                              similarity: r.similarity
                             }))
                         }}
+                      />
+                    </TabsContent>
+                    
+                    <TabsContent value="similarity" className="mt-4">
+                      <QuerySimilarityMatrix
+                        queries={response.reformulations.map(r => ({
+                          id: r.id,
+                          query: r.query,
+                          type: r.type
+                        }))}
+                        calculateSimilarity={calculateSemanticSimilarity}
                       />
                     </TabsContent>
                     

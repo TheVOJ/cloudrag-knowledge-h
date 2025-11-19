@@ -28,6 +28,7 @@ export type QueryLink = {
   target: string
   type: 'decomposed' | 'expanded' | 'simplified' | 'refined' | 'fallback'
   reasoning?: string
+  similarity?: number
 }
 
 export type QueryReformulationData = {
@@ -137,20 +138,49 @@ export function QueryReformulationGraph({ data, onNodeClick }: QueryReformulatio
       .selectAll('line')
       .data(links)
       .join('line')
-      .attr('stroke', d => linkTypeColors[d.type] || 'oklch(0.80 0.05 75)')
-      .attr('stroke-width', 2)
-      .attr('stroke-opacity', 0.6)
+      .attr('stroke', d => {
+        if (d.similarity !== undefined) {
+          const opacity = d.similarity
+          return `oklch(${0.58 + (0.2 * opacity)} ${0.15 * (1 - opacity * 0.5)} 65)`
+        }
+        return linkTypeColors[d.type] || 'oklch(0.80 0.05 75)'
+      })
+      .attr('stroke-width', d => d.similarity !== undefined ? 2 + (d.similarity * 3) : 2)
+      .attr('stroke-opacity', d => d.similarity !== undefined ? 0.4 + (d.similarity * 0.5) : 0.6)
       .attr('marker-end', 'url(#arrowhead)')
 
     const linkLabel = g.append('g')
-      .selectAll('text')
+      .selectAll('g')
       .data(links)
-      .join('text')
-      .attr('font-size', 10)
+      .join('g')
+
+    linkLabel.append('rect')
+      .attr('x', -25)
+      .attr('y', -15)
+      .attr('width', 50)
+      .attr('height', d => d.similarity !== undefined ? 20 : 12)
+      .attr('fill', 'oklch(1.00 0 0)')
+      .attr('stroke', 'oklch(0.80 0.05 75)')
+      .attr('stroke-width', 1)
+      .attr('rx', 4)
+      .attr('opacity', 0.95)
+
+    linkLabel.append('text')
+      .attr('font-size', 9)
       .attr('fill', 'oklch(0.48 0.02 55)')
       .attr('text-anchor', 'middle')
-      .attr('dy', -5)
+      .attr('dy', d => d.similarity !== undefined ? -3 : 3)
+      .attr('font-weight', 500)
       .text(d => d.type)
+
+    linkLabel.filter(d => d.similarity !== undefined)
+      .append('text')
+      .attr('font-size', 8)
+      .attr('fill', 'oklch(0.58 0.15 65)')
+      .attr('text-anchor', 'middle')
+      .attr('dy', 8)
+      .attr('font-weight', 600)
+      .text(d => d.similarity !== undefined ? `${(d.similarity * 100).toFixed(0)}%` : '')
 
     const nodeTypeColors: Record<string, string> = {
       original: 'oklch(0.58 0.15 65)',
@@ -260,8 +290,11 @@ export function QueryReformulationGraph({ data, onNodeClick }: QueryReformulatio
         .attr('y2', d => (d.target as D3Node).y || 0)
 
       linkLabel
-        .attr('x', d => ((d.source as D3Node).x! + (d.target as D3Node).x!) / 2)
-        .attr('y', d => ((d.source as D3Node).y! + (d.target as D3Node).y!) / 2)
+        .attr('transform', d => {
+          const x = ((d.source as D3Node).x! + (d.target as D3Node).x!) / 2
+          const y = ((d.source as D3Node).y! + (d.target as D3Node).y!) / 2
+          return `translate(${x},${y})`
+        })
 
       node.attr('transform', d => `translate(${d.x},${d.y})`)
     })
@@ -408,6 +441,14 @@ export function QueryReformulationGraph({ data, onNodeClick }: QueryReformulatio
                 </div>
               ))}
             </div>
+            <div className="mt-3 pt-3 border-t">
+              <div className="text-xs text-muted-foreground">
+                <span className="font-medium">Link Thickness:</span> Indicates similarity score
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                <span className="font-medium">Percentage:</span> Semantic similarity (0-100%)
+              </div>
+            </div>
           </Card>
 
           {selectedNode && (
@@ -475,6 +516,8 @@ export function QueryReformulationGraph({ data, onNodeClick }: QueryReformulatio
           <li>Use mouse wheel or zoom controls to adjust view</li>
           <li>Click on nodes to see detailed information</li>
           <li>Hover over nodes for visual emphasis</li>
+          <li>Link thickness and labels show similarity scores between queries</li>
+          <li>Higher similarity means queries are more semantically related</li>
         </ul>
       </div>
     </div>
