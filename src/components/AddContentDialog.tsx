@@ -75,9 +75,9 @@ export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialog
       case 'github':
         return 'https://github.com/username/repository'
       case 'onedrive':
-        return 'OneDrive folder path or file URL'
+        return '/Documents/ProjectFiles or shared link'
       case 'dropbox':
-        return 'Dropbox folder path or file URL'
+        return '/Work/Documentation or shared link'
     }
   }
   
@@ -114,8 +114,8 @@ export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialog
                 <p className="text-xs text-muted-foreground">
                   {type === 'web' && 'Enter a URL to crawl and index web content'}
                   {type === 'github' && 'Enter a GitHub repository URL to index source code and documentation'}
-                  {type === 'onedrive' && 'Enter a OneDrive path to index documents (simulated)'}
-                  {type === 'dropbox' && 'Enter a Dropbox path to index files (simulated)'}
+                  {type === 'onedrive' && 'Enter a OneDrive folder path (e.g., /Documents/Projects) to index Word docs, PDFs, text files, and more'}
+                  {type === 'dropbox' && 'Enter a Dropbox folder path (e.g., /Work/Docs) to index documents, markdown files, and other content'}
                 </p>
               </div>
               

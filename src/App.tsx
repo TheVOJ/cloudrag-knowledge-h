@@ -5,6 +5,8 @@ import { generateId, simulateDocumentExtraction } from '@/lib/helpers'
 import { AzureSearchService } from '@/lib/azure-search'
 import { scrapeWebContent, convertToDocument as convertWebToDocument } from '@/lib/web-scraper'
 import { fetchRepoContent, convertRepoToDocuments } from '@/lib/github-service'
+import { simulateOneDriveFetch } from '@/lib/onedrive-service'
+import { simulateDropboxFetch } from '@/lib/dropbox-service'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { KnowledgeBaseCard } from '@/components/KnowledgeBaseCard'
@@ -16,6 +18,7 @@ import { QueryInterface } from '@/components/QueryInterface'
 import { AgenticQueryInterface } from '@/components/AgenticQueryInterface'
 import { QueryHistory } from '@/components/QueryHistory'
 import { AzureSettingsDialog } from '@/components/AzureSettingsDialog'
+import { CloudStorageSettingsDialog, CloudStorageSettings } from '@/components/CloudStorageSettingsDialog'
 import { ChunkVisualizerDialog } from '@/components/ChunkVisualizerDialog'
 import { StrategyPerformanceDashboard } from '@/components/StrategyPerformanceDashboard'
 import { Database, Plus, ArrowLeft, ChartBar, MagnifyingGlass, FileText, Gear, Lightning, Brain } from '@phosphor-icons/react'
@@ -33,6 +36,10 @@ function App() {
     apiKey: '',
     enabled: false,
   })
+  const [cloudStorageSettings, setCloudStorageSettings] = useKV<CloudStorageSettings>('cloud-storage-settings', {
+    onedrive: { enabled: false, accessToken: '' },
+    dropbox: { enabled: false, accessToken: '' }
+  })
   
   const [currentView, setCurrentView] = useState<View>('dashboard')
   const [selectedKB, setSelectedKB] = useState<KnowledgeBase | null>(null)
@@ -41,6 +48,7 @@ function App() {
   const [viewingDocument, setViewingDocument] = useState<Document | null>(null)
   const [showDocumentViewer, setShowDocumentViewer] = useState(false)
   const [showAzureSettings, setShowAzureSettings] = useState(false)
+  const [showCloudStorageSettings, setShowCloudStorageSettings] = useState(false)
   const [syncingToAzure, setSyncingToAzure] = useState(false)
   const [showChunkVisualizer, setShowChunkVisualizer] = useState(false)
   const [visualizerDocument, setVisualizerDocument] = useState<Document | null>(null)
@@ -108,6 +116,20 @@ function App() {
       } else if (sourceType === 'github') {
         const repoContent = await fetchRepoContent(sourceUrl)
         documentsToAdd = convertRepoToDocuments(repoContent, sourceUrl)
+      } else if (sourceType === 'onedrive') {
+        const token = cloudStorageSettings?.onedrive.accessToken || ''
+        if (cloudStorageSettings?.onedrive.enabled && !token) {
+          throw new Error('OneDrive is enabled but no access token is configured. Please configure it in Cloud Storage settings.')
+        }
+        const { convertOneDriveToDocuments } = await import('@/lib/onedrive-service')
+        documentsToAdd = await convertOneDriveToDocuments(token, sourceUrl, sourceUrl)
+      } else if (sourceType === 'dropbox') {
+        const token = cloudStorageSettings?.dropbox.accessToken || ''
+        if (cloudStorageSettings?.dropbox.enabled && !token) {
+          throw new Error('Dropbox is enabled but no access token is configured. Please configure it in Cloud Storage settings.')
+        }
+        const { convertDropboxToDocuments } = await import('@/lib/dropbox-service')
+        documentsToAdd = await convertDropboxToDocuments(token, sourceUrl, sourceUrl)
       } else {
         const extracted = simulateDocumentExtraction(sourceType, sourceUrl)
         documentsToAdd = [{
@@ -252,6 +274,10 @@ function App() {
   
   const handleSaveAzureSettings = (settings: AzureSearchSettings) => {
     setAzureSettings(settings)
+  }
+  
+  const handleSaveCloudStorageSettings = (settings: CloudStorageSettings) => {
+    setCloudStorageSettings(settings)
   }
   
   const syncExistingDocumentsToAzure = async () => {
@@ -595,6 +621,19 @@ function App() {
               </Button>
               <Button
                 variant="ghost"
+                onClick={() => setShowCloudStorageSettings(true)}
+                className="gap-1 sm:gap-2 h-8 sm:h-10 px-2 sm:px-4"
+                size="sm"
+              >
+                {(cloudStorageSettings?.onedrive.enabled || cloudStorageSettings?.dropbox.enabled) ? (
+                  <Lightning size={16} weight="fill" className="text-accent sm:w-4 sm:h-4" />
+                ) : (
+                  <>☁️</>
+                )}
+                <span className="hidden lg:inline">Cloud Storage</span>
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={() => setShowAzureSettings(true)}
                 className="gap-1 sm:gap-2 h-8 sm:h-10 px-2 sm:px-4"
                 size="sm"
@@ -642,6 +681,13 @@ function App() {
         onOpenChange={setShowAzureSettings}
         settings={azureSettings || { endpoint: '', apiKey: '', enabled: false }}
         onSave={handleSaveAzureSettings}
+      />
+      
+      <CloudStorageSettingsDialog
+        open={showCloudStorageSettings}
+        onOpenChange={setShowCloudStorageSettings}
+        settings={cloudStorageSettings || { onedrive: { enabled: false, accessToken: '' }, dropbox: { enabled: false, accessToken: '' } }}
+        onSave={handleSaveCloudStorageSettings}
       />
       
       <ChunkVisualizerDialog
