@@ -14,13 +14,25 @@ interface DocumentListItemProps {
 }
 
 export function DocumentListItem({ document, onDelete, onView, onEdit, onViewChunks }: DocumentListItemProps) {
+  const hasThumbnail = document.metadata.thumbnail && document.sourceType === 'pdf'
+  
   return (
     <Card className="p-3 sm:p-4 hover:bg-accent/5 transition-colors">
       <div className="flex items-start justify-between gap-2 sm:gap-4">
         <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
-            <FileText size={18} className="sm:w-5 sm:h-5 text-accent" weight="duotone" />
-          </div>
+          {hasThumbnail ? (
+            <div className="w-16 h-20 sm:w-20 sm:h-24 rounded-lg border border-border overflow-hidden flex-shrink-0 bg-muted">
+              <img 
+                src={document.metadata.thumbnail} 
+                alt={`${document.title} preview`}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
+              <FileText size={18} className="sm:w-5 sm:h-5 text-accent" weight="duotone" />
+            </div>
+          )}
           
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1 sm:gap-2 mb-1">
@@ -46,6 +58,12 @@ export function DocumentListItem({ document, onDelete, onView, onEdit, onViewChu
                 <>
                   <span className="hidden sm:inline">•</span>
                   <span className="hidden sm:inline">{(document.metadata.size / 1024).toFixed(1)} KB</span>
+                </>
+              )}
+              {document.metadata.pageCount && (
+                <>
+                  <span className="hidden sm:inline">•</span>
+                  <span className="hidden sm:inline">{document.metadata.pageCount} pages</span>
                 </>
               )}
             </div>

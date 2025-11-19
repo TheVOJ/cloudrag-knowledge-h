@@ -21,6 +21,7 @@ export function FileUploadDialog({ open, onOpenChange, onUpload }: FileUploadDia
   const [error, setError] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState<string>('')
   const [processedFiles, setProcessedFiles] = useState<Set<string>>(new Set())
+  const [fileThumbnails, setFileThumbnails] = useState<Map<string, string>>(new Map())
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,6 +70,10 @@ export function FileUploadDialog({ open, onOpenChange, onUpload }: FileUploadDia
             fileName: file.name
           })
           
+          if (parsed.metadata.thumbnail) {
+            setFileThumbnails(prev => new Map(prev).set(file.name, parsed.metadata.thumbnail!))
+          }
+          
           setProcessedFiles(prev => new Set([...prev, file.name]))
         } catch (fileError) {
           console.error(`Error parsing ${file.name}:`, fileError)
@@ -91,6 +96,7 @@ export function FileUploadDialog({ open, onOpenChange, onUpload }: FileUploadDia
         setProgress(0)
         setStatusMessage('')
         setProcessedFiles(new Set())
+        setFileThumbnails(new Map())
       }, 500)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to process files')
@@ -146,35 +152,50 @@ export function FileUploadDialog({ open, onOpenChange, onUpload }: FileUploadDia
             <div className="space-y-2">
               <Label className="text-sm font-medium">Selected Files ({selectedFiles.length})</Label>
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {selectedFiles.map((file, index) => (
-                  <Card key={`${file.name}-${index}`} className="p-3">
-                    <div className="flex items-center gap-3">
-                      {getFileIcon(file)}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium truncate">{file.name}</p>
-                          {processedFiles.has(file.name) && (
-                            <CheckCircle size={16} weight="fill" className="text-green-600 flex-shrink-0" />
-                          )}
+                {selectedFiles.map((file, index) => {
+                  const thumbnail = fileThumbnails.get(file.name)
+                  const isPDF = file.name.toLowerCase().endsWith('.pdf')
+                  
+                  return (
+                    <Card key={`${file.name}-${index}`} className="p-3">
+                      <div className="flex items-center gap-3">
+                        {thumbnail ? (
+                          <div className="w-12 h-16 rounded border border-border overflow-hidden flex-shrink-0 bg-muted">
+                            <img 
+                              src={thumbnail} 
+                              alt={`${file.name} preview`}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          getFileIcon(file)
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium truncate">{file.name}</p>
+                            {processedFiles.has(file.name) && (
+                              <CheckCircle size={16} weight="fill" className="text-green-600 flex-shrink-0" />
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
                         </div>
-                        <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                        {!isProcessing && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              removeFile(index)
+                            }}
+                            className="flex-shrink-0"
+                          >
+                            Remove
+                          </Button>
+                        )}
                       </div>
-                      {!isProcessing && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            removeFile(index)
-                          }}
-                          className="flex-shrink-0"
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  )
+                })}
               </div>
             </div>
           )}

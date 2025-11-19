@@ -11,6 +11,8 @@ export interface Document {
     size?: number
     lastModified?: number
     author?: string
+    thumbnail?: string
+    pageCount?: number
   }
 }
 

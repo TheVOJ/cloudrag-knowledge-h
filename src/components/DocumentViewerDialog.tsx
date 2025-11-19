@@ -137,10 +137,25 @@ export function DocumentViewerDialog({
                   placeholder="Document content..."
                 />
               ) : (
-                <div
-                  className="prose prose-sm max-w-none p-4"
-                  dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
-                />
+                <div className="p-4 space-y-4">
+                  {document.metadata.thumbnail && document.sourceType === 'pdf' && (
+                    <div className="border border-border rounded-lg overflow-hidden bg-muted inline-block">
+                      <img 
+                        src={document.metadata.thumbnail} 
+                        alt={`${document.title} first page preview`}
+                        className="max-w-full h-auto"
+                        style={{ maxHeight: '400px' }}
+                      />
+                      <div className="px-3 py-2 bg-background border-t border-border text-xs text-muted-foreground">
+                        Page 1 of {document.metadata.pageCount || 1}
+                      </div>
+                    </div>
+                  )}
+                  <div
+                    className="prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
+                  />
+                </div>
               )}
             </ScrollArea>
           </TabsContent>

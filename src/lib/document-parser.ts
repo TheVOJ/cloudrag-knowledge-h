@@ -12,6 +12,33 @@ export interface ParsedDocument {
     lastModified?: number
     author?: string
     fileType: 'pdf' | 'docx'
+    thumbnail?: string
+  }
+}
+
+async function generatePDFThumbnail(pdf: pdfjsLib.PDFDocumentProxy): Promise<string> {
+  try {
+    const page = await pdf.getPage(1)
+    const viewport = page.getViewport({ scale: 0.5 })
+    
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('Could not get canvas context')
+    
+    canvas.height = viewport.height
+    canvas.width = viewport.width
+    
+    const renderContext = {
+      canvasContext: context,
+      viewport: viewport
+    }
+    
+    await page.render(renderContext).promise
+    
+    return canvas.toDataURL('image/jpeg', 0.7)
+  } catch (error) {
+    console.error('Error generating PDF thumbnail:', error)
+    return ''
   }
 }
 
@@ -37,6 +64,8 @@ export async function parsePDF(file: File): Promise<ParsedDocument> {
   const metadata = await pdf.getMetadata()
   const info = metadata.info as any
   
+  const thumbnail = await generatePDFThumbnail(pdf)
+  
   return {
     title: file.name.replace(/\.pdf$/i, ''),
     content: fullText,
@@ -45,7 +74,8 @@ export async function parsePDF(file: File): Promise<ParsedDocument> {
       size: file.size,
       lastModified: file.lastModified,
       author: info?.Author || undefined,
-      fileType: 'pdf'
+      fileType: 'pdf',
+      thumbnail: thumbnail || undefined
     }
   }
 }
