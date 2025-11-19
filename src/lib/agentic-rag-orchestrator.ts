@@ -4,6 +4,18 @@ import { RetrievalExecutor, RetrievalResult } from './retrieval-executor'
 import { SelfReflectiveRAG, SelfEvaluation, CriticFeedback } from './self-reflective-rag'
 import { StrategyPerformanceTracker } from './strategy-performance-tracker'
 
+export type QueryReformulation = {
+  id: string
+  query: string
+  type: 'original' | 'reformulation' | 'subquery' | 'expansion' | 'simplification'
+  iteration: number
+  confidence?: number
+  reasoning?: string
+  timestamp: number
+  parentId?: string
+  linkType?: 'decomposed' | 'expanded' | 'simplified' | 'refined' | 'fallback'
+}
+
 export type ProgressStep = {
   phase: 'routing' | 'retrieval' | 'generation' | 'evaluation' | 'criticism' | 'retry' | 'complete'
   status: 'pending' | 'in_progress' | 'complete' | 'error'
@@ -22,6 +34,7 @@ export type AgenticRAGResponse = {
   evaluation: SelfEvaluation
   criticism?: CriticFeedback
   iterations: number
+  reformulations: QueryReformulation[]
   metadata: {
     totalTimeMs: number
     retrievalMethod: string
@@ -72,6 +85,10 @@ export class AgenticRAGOrchestrator {
     }
   }
 
+  private generateId(): string {
+    return `qr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
+
   async query(
     userQuery: string,
     config: AgenticRAGConfig = {}
@@ -85,6 +102,16 @@ export class AgenticRAGOrchestrator {
     
     let iteration = 0
     let currentQuery = userQuery
+    const reformulations: QueryReformulation[] = []
+    const originalId = this.generateId()
+    
+    reformulations.push({
+      id: originalId,
+      query: userQuery,
+      type: 'original',
+      iteration: 0,
+      timestamp: Date.now()
+    })
     let routing: RoutingDecision | null = null
     let retrieval: RetrievalResult | null = null
     let answer = ''
@@ -224,8 +251,25 @@ export class AgenticRAGOrchestrator {
       }
       
       let subQueries: string[] | undefined
-      if (routing.strategy === 'multi_query' && routing.subQueries) {
+      let currentParentId = reformulations[reformulations.length - 1].id
+      
+      if (routing && routing.strategy === 'multi_query' && routing.subQueries) {
         subQueries = routing.subQueries
+        
+        subQueries.forEach((subQuery, index) => {
+          const subQueryId = this.generateId()
+          reformulations.push({
+            id: subQueryId,
+            query: subQuery,
+            type: 'subquery',
+            iteration,
+            confidence: routing!.confidence,
+            reasoning: `Decomposed from parent query (${index + 1}/${subQueries!.length})`,
+            timestamp: Date.now(),
+            parentId: currentParentId,
+            linkType: 'decomposed'
+          })
+        })
         
         this.emitProgress(config, {
           phase: 'retrieval',
@@ -235,7 +279,7 @@ export class AgenticRAGOrchestrator {
           progress: 35,
           metadata: { subQueries }
         })
-      } else if (routing.strategy === 'multi_query') {
+      } else if (routing && routing.strategy === 'multi_query') {
         this.emitProgress(config, {
           phase: 'retrieval',
           status: 'in_progress',
@@ -245,6 +289,21 @@ export class AgenticRAGOrchestrator {
         })
         
         subQueries = await this.router.generateSubQueries(currentQuery)
+        
+        subQueries.forEach((subQuery, index) => {
+          const subQueryId = this.generateId()
+          reformulations.push({
+            id: subQueryId,
+            query: subQuery,
+            type: 'subquery',
+            iteration,
+            confidence: routing!.confidence,
+            reasoning: `Decomposed from parent query (${index + 1}/${subQueries!.length})`,
+            timestamp: Date.now(),
+            parentId: currentParentId,
+            linkType: 'decomposed'
+          })
+        })
         
         this.emitProgress(config, {
           phase: 'retrieval',
@@ -435,7 +494,25 @@ export class AgenticRAGOrchestrator {
             metadata: { improvements: improvements.actions }
           })
           
+          const previousQueryId = reformulations[reformulations.length - 1].id
           currentQuery = await this.reformulateQuery(userQuery, evaluation, improvements.actions)
+          
+          const reformulationId = this.generateId()
+          const reformulationType = improvements.actions.some(a => a.includes('expand')) ? 'expansion' :
+                                   improvements.actions.some(a => a.includes('simplif')) ? 'simplification' :
+                                   'reformulation'
+          
+          reformulations.push({
+            id: reformulationId,
+            query: currentQuery,
+            type: reformulationType,
+            iteration: iteration + 1,
+            confidence: evaluation.confidence,
+            reasoning: improvements.actions.join('; '),
+            timestamp: Date.now(),
+            parentId: previousQueryId,
+            linkType: 'refined'
+          })
           
           this.emitProgress(config, {
             phase: 'retry',
@@ -490,6 +567,7 @@ export class AgenticRAGOrchestrator {
       evaluation,
       criticism,
       iterations: iteration,
+      reformulations,
       metadata: {
         totalTimeMs,
         retrievalMethod: retrieval.method,

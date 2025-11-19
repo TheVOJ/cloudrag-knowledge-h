@@ -30,6 +30,7 @@ import { StrategyPerformanceTracker } from '@/lib/strategy-performance-tracker'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { AgenticFlowDiagram } from '@/components/AgenticFlowDiagram'
+import { QueryReformulationGraph, QueryReformulationData } from '@/components/QueryReformulationGraph'
 import { toast } from 'sonner'
 
 interface AgenticQueryInterfaceProps {
@@ -147,6 +148,7 @@ export function AgenticQueryInterface({
           reasoning: 'Error during processing'
         },
         iterations: 0,
+        reformulations: [],
         metadata: {
           totalTimeMs: 0,
           retrievalMethod: 'hybrid',
@@ -480,8 +482,9 @@ export function AgenticQueryInterface({
                 
                 <CollapsibleContent>
                   <Tabs defaultValue="progress" className="mt-3 sm:mt-4">
-                    <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 text-xs">
+                    <TabsList className="grid w-full grid-cols-3 sm:grid-cols-7 text-xs">
                       <TabsTrigger value="progress" className="text-xs">Progress</TabsTrigger>
+                      <TabsTrigger value="reformulations" className="text-xs">Queries</TabsTrigger>
                       <TabsTrigger value="flow" className="text-xs">Flow</TabsTrigger>
                       <TabsTrigger value="routing" className="text-xs hidden sm:flex">Routing</TabsTrigger>
                       <TabsTrigger value="retrieval" className="text-xs">Retrieval</TabsTrigger>
@@ -594,6 +597,22 @@ export function AgenticQueryInterface({
                           No progress data available
                         </div>
                       )}
+                    </TabsContent>
+                    
+                    <TabsContent value="reformulations" className="mt-4">
+                      <QueryReformulationGraph 
+                        data={{
+                          nodes: response.reformulations,
+                          links: response.reformulations
+                            .filter(r => r.parentId)
+                            .map(r => ({
+                              source: r.parentId!,
+                              target: r.id,
+                              type: r.linkType!,
+                              reasoning: r.reasoning
+                            }))
+                        }}
+                      />
                     </TabsContent>
                     
                     <TabsContent value="flow" className="mt-4">
