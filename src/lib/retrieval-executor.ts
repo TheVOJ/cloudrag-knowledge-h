@@ -10,12 +10,26 @@ export type RetrievalResult = {
   metadata?: {
     azureResults?: SearchResult[]
     subQueryResults?: Map<string, RetrievalResult>
+    ragFusionVariations?: string[]
   }
 }
 
+/**
+ * Executes document retrieval using various search strategies.
+ *
+ * This class abstracts the complexity of different retrieval methods and search backends
+ * (Azure AI Search vs. Simulated Local Search).
+ *
+ * Supported Strategies:
+ * - Semantic: Embedding-based vector search
+ * - Keyword: Token-matching (BM25-style)
+ * - Hybrid: Weighted combination of Semantic and Keyword
+ * - Multi-Query: Parallel execution of decomposed sub-queries
+ * - RAG Fusion: Query expansion with Reciprocal Rank Fusion (RRF)
+ */
 export class RetrievalExecutor {
   private azureService?: AzureSearchService
-  
+
   constructor(
     azureEndpoint?: string,
     azureApiKey?: string,
@@ -29,7 +43,7 @@ export class RetrievalExecutor {
       })
     }
   }
-  
+
   async executeRetrieval(
     query: string,
     documents: Document[],
@@ -40,19 +54,19 @@ export class RetrievalExecutor {
     switch (strategy) {
       case 'semantic':
         return this.semanticRetrieval(query, documents, topK)
-      
+
       case 'keyword':
         return this.keywordRetrieval(query, documents, topK)
-      
+
       case 'hybrid':
         return this.hybridRetrieval(query, documents, topK)
-      
+
       case 'multi_query':
         return this.multiQueryRetrieval(query, documents, topK, subQueries)
-      
+
       case 'rag_fusion':
         return this.ragFusionRetrieval(query, documents, topK)
-      
+
       case 'direct_answer':
         return {
           documents: [],
@@ -60,12 +74,12 @@ export class RetrievalExecutor {
           method: 'direct_answer',
           queryUsed: query
         }
-      
+
       default:
         return this.hybridRetrieval(query, documents, topK)
     }
   }
-  
+
   private async semanticRetrieval(
     query: string,
     documents: Document[],
@@ -75,11 +89,11 @@ export class RetrievalExecutor {
       try {
         const results = await this.azureService.search(query, topK)
         const docMap = new Map(documents.map(d => [d.id, d]))
-        
+
         const retrievedDocs = results
           .map(r => docMap.get(r.id))
           .filter((d): d is Document => d !== undefined)
-        
+
         return {
           documents: retrievedDocs,
           scores: results.map(r => r.score),
@@ -91,10 +105,10 @@ export class RetrievalExecutor {
         console.error('Azure semantic search failed, falling back to simulated', error)
       }
     }
-    
+
     return this.simulatedSemanticSearch(query, documents, topK)
   }
-  
+
   private async simulatedSemanticSearch(
     query: string,
     documents: Document[],
@@ -102,28 +116,28 @@ export class RetrievalExecutor {
   ): Promise<RetrievalResult> {
     const queryLower = query.toLowerCase()
     const queryTerms = queryLower.split(/\s+/)
-    
+
     const scored = documents.map(doc => {
       const text = (doc.title + ' ' + doc.content).toLowerCase()
       let score = 0
-      
+
       queryTerms.forEach(term => {
         if (term.length > 2) {
           const termCount = (text.match(new RegExp(term, 'g')) || []).length
           score += termCount * (term.length / 10)
         }
       })
-      
+
       if (text.includes(queryLower)) {
         score += 5
       }
-      
+
       return { doc, score: Math.min(score / 10, 1) }
     })
-    
+
     scored.sort((a, b) => b.score - a.score)
     const topResults = scored.slice(0, topK)
-    
+
     return {
       documents: topResults.map(r => r.doc),
       scores: topResults.map(r => r.score),
@@ -131,30 +145,51 @@ export class RetrievalExecutor {
       queryUsed: query
     }
   }
-  
-  private keywordRetrieval(
+
+  private async keywordRetrieval(
     query: string,
     documents: Document[],
     topK: number
   ): Promise<RetrievalResult> {
+    if (this.azureService) {
+      try {
+        const results = await this.azureService.search(query, topK, undefined, 'keyword')
+        const docMap = new Map(documents.map(d => [d.id, d]))
+
+        const retrievedDocs = results
+          .map(r => docMap.get(r.id))
+          .filter((d): d is Document => d !== undefined)
+
+        return {
+          documents: retrievedDocs,
+          scores: results.map(r => r.score),
+          method: 'keyword',
+          queryUsed: query,
+          metadata: { azureResults: results }
+        }
+      } catch (error) {
+        console.error('Azure keyword search failed, falling back to simulated', error)
+      }
+    }
+
     const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2)
-    
+
     const scored = documents.map(doc => {
       const text = (doc.title + ' ' + doc.content).toLowerCase()
       const words = text.split(/\s+/)
-      
+
       let exactMatches = 0
       queryTerms.forEach(term => {
         exactMatches += words.filter(w => w === term).length
       })
-      
+
       const score = exactMatches / (queryTerms.length * 5)
       return { doc, score: Math.min(score, 1) }
     })
-    
+
     scored.sort((a, b) => b.score - a.score)
     const topResults = scored.slice(0, topK)
-    
+
     return Promise.resolve({
       documents: topResults.map(r => r.doc),
       scores: topResults.map(r => r.score),
@@ -162,7 +197,7 @@ export class RetrievalExecutor {
       queryUsed: query
     })
   }
-  
+
   private async hybridRetrieval(
     query: string,
     documents: Document[],
@@ -172,9 +207,9 @@ export class RetrievalExecutor {
       this.semanticRetrieval(query, documents, topK * 2),
       this.keywordRetrieval(query, documents, topK * 2)
     ])
-    
+
     const scoreMap = new Map<string, { doc: Document; semanticScore: number; keywordScore: number }>()
-    
+
     semanticResult.documents.forEach((doc, i) => {
       scoreMap.set(doc.id, {
         doc,
@@ -182,7 +217,7 @@ export class RetrievalExecutor {
         keywordScore: 0
       })
     })
-    
+
     keywordResult.documents.forEach((doc, i) => {
       const existing = scoreMap.get(doc.id)
       if (existing) {
@@ -195,15 +230,15 @@ export class RetrievalExecutor {
         })
       }
     })
-    
+
     const hybridScored = Array.from(scoreMap.values()).map(item => ({
       doc: item.doc,
       score: (item.semanticScore * 0.6) + (item.keywordScore * 0.4)
     }))
-    
+
     hybridScored.sort((a, b) => b.score - a.score)
     const topResults = hybridScored.slice(0, topK)
-    
+
     return {
       documents: topResults.map(r => r.doc),
       scores: topResults.map(r => r.score),
@@ -211,7 +246,7 @@ export class RetrievalExecutor {
       queryUsed: query
     }
   }
-  
+
   private async multiQueryRetrieval(
     query: string,
     documents: Document[],
@@ -221,18 +256,18 @@ export class RetrievalExecutor {
     if (!subQueries || subQueries.length === 0) {
       return this.hybridRetrieval(query, documents, topK)
     }
-    
+
     const results = await Promise.all(
       subQueries.map(sq => this.hybridRetrieval(sq, documents, topK))
     )
-    
+
     const scoreMap = new Map<string, { doc: Document; totalScore: number; appearances: number }>()
-    
+
     results.forEach(result => {
       result.documents.forEach((doc, i) => {
         const score = result.scores[i] || 0
         const existing = scoreMap.get(doc.id)
-        
+
         if (existing) {
           existing.totalScore += score
           existing.appearances++
@@ -245,20 +280,20 @@ export class RetrievalExecutor {
         }
       })
     })
-    
+
     const aggregated = Array.from(scoreMap.values()).map(item => ({
       doc: item.doc,
       score: (item.totalScore / item.appearances) * (1 + (item.appearances * 0.1))
     }))
-    
+
     aggregated.sort((a, b) => b.score - a.score)
     const topResults = aggregated.slice(0, topK)
-    
+
     const subQueryResultsMap = new Map<string, RetrievalResult>()
     subQueries.forEach((sq, i) => {
       subQueryResultsMap.set(sq, results[i])
     })
-    
+
     return {
       documents: topResults.map(r => r.doc),
       scores: topResults.map(r => r.score),
@@ -267,28 +302,29 @@ export class RetrievalExecutor {
       metadata: { subQueryResults: subQueryResultsMap }
     }
   }
-  
+
   private async ragFusionRetrieval(
     query: string,
     documents: Document[],
     topK: number
   ): Promise<RetrievalResult> {
     const variations = await this.generateQueryVariations(query)
-    
+
     const results = await Promise.all(
       variations.map(v => this.hybridRetrieval(v, documents, topK * 2))
     )
-    
+
     const rrfScores = this.reciprocalRankFusion(results, topK)
-    
+
     return {
       documents: rrfScores.map(r => r.doc),
       scores: rrfScores.map(r => r.score),
       method: 'rag_fusion',
-      queryUsed: query
+      queryUsed: query,
+      metadata: { ragFusionVariations: variations }
     }
   }
-  
+
   private async generateQueryVariations(query: string): Promise<string[]> {
     const prompt = `Generate 3 semantically similar query variations:
 
@@ -306,19 +342,19 @@ Respond with ONLY valid JSON array.`
       return [query]
     }
   }
-  
+
   private reciprocalRankFusion(
     results: RetrievalResult[],
     topK: number,
     k: number = 60
   ): Array<{ doc: Document; score: number }> {
     const rrfScores = new Map<string, { doc: Document; score: number }>()
-    
+
     results.forEach(result => {
       result.documents.forEach((doc, rank) => {
         const rrfScore = 1 / (k + rank + 1)
         const existing = rrfScores.get(doc.id)
-        
+
         if (existing) {
           existing.score += rrfScore
         } else {
@@ -326,11 +362,11 @@ Respond with ONLY valid JSON array.`
         }
       })
     })
-    
+
     const sorted = Array.from(rrfScores.values())
       .sort((a, b) => b.score - a.score)
       .slice(0, topK)
-    
+
     const maxScore = sorted[0]?.score || 1
     return sorted.map(item => ({
       doc: item.doc,

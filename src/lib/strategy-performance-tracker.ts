@@ -59,6 +59,17 @@ export type LearningInsight = {
   timestamp: number
 }
 
+/**
+ * Tracks and analyzes the performance of retrieval strategies to optimize future queries.
+ * 
+ * This class implements a learning system that:
+ * 1. Records metrics for every query (success rate, confidence, latency)
+ * 2. Aggregates data by Intent and Strategy
+ * 3. Provides data-driven recommendations for Strategy Selection
+ * 4. Generates actionable insights (e.g., "Strategy X performs poorly for Intent Y")
+ * 
+ * It uses Spark KV storage to persist performance history and insights.
+ */
 export class StrategyPerformanceTracker {
   private static STORAGE_KEY = 'strategy-performance-data'
   private static QUERY_HISTORY_KEY = 'query-performance-history'

@@ -35,7 +35,7 @@ export class AzureSearchService {
 
   private async makeRequest(path: string, method: string, body?: unknown) {
     const url = `${this.config.endpoint}${path}?api-version=${this.apiVersion}`
-    
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'api-key': this.config.apiKey,
@@ -128,18 +128,28 @@ export class AzureSearchService {
     )
   }
 
-  async search(query: string, top: number = 5, filter?: string): Promise<SearchResult[]> {
-    const searchBody = {
+  async search(
+    query: string,
+    top: number = 5,
+    filter?: string,
+    mode: 'semantic' | 'keyword' = 'semantic'
+  ): Promise<SearchResult[]> {
+    const searchBody: any = {
       search: query,
       top,
       filter,
-      queryType: 'semantic',
-      semanticConfiguration: 'default',
       select: 'id,title,content',
       highlight: 'content',
       highlightPreTag: '<mark>',
       highlightPostTag: '</mark>',
       scoringProfile: 'recentBoost',
+    }
+
+    if (mode === 'semantic') {
+      searchBody.queryType = 'semantic'
+      searchBody.semanticConfiguration = 'default'
+    } else {
+      searchBody.queryType = 'simple'
     }
 
     const response = await this.makeRequest(
@@ -181,9 +191,9 @@ export class AzureSearchService {
   private chunkDocument(content: string, chunkSize: number = 1000): string[] {
     const chunks: string[] = []
     const paragraphs = content.split(/\n\n+/)
-    
+
     let currentChunk = ''
-    
+
     for (const paragraph of paragraphs) {
       if (currentChunk.length + paragraph.length > chunkSize && currentChunk.length > 0) {
         chunks.push(currentChunk.trim())
@@ -192,11 +202,11 @@ export class AzureSearchService {
         currentChunk += (currentChunk ? '\n\n' : '') + paragraph
       }
     }
-    
+
     if (currentChunk) {
       chunks.push(currentChunk.trim())
     }
-    
+
     return chunks
   }
 
@@ -214,22 +224,22 @@ export function validateAzureConfig(config: Partial<AzureSearchConfig>): string 
   if (!config.endpoint) {
     return 'Azure Search endpoint is required'
   }
-  
+
   if (!config.endpoint.startsWith('https://')) {
     return 'Endpoint must start with https://'
   }
-  
+
   if (!config.apiKey) {
     return 'API key is required'
   }
-  
+
   if (!config.indexName) {
     return 'Index name is required'
   }
-  
+
   if (!/^[a-z0-9-]+$/.test(config.indexName)) {
     return 'Index name must contain only lowercase letters, numbers, and hyphens'
   }
-  
+
   return null
 }

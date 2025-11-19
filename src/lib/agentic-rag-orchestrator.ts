@@ -54,13 +54,25 @@ export type AgenticRAGConfig = {
   onProgress?: (step: ProgressStep) => void
 }
 
+/**
+ * Coordinates the entire Agentic RAG process.
+ *
+ * This class acts as the main controller for the RAG pipeline, managing the flow of data
+ * between the Router, Retrieval Executor, and Self-Reflection components.
+ *
+ * Key responsibilities:
+ * - Orchestrates the multi-step query process (Routing -> Retrieval -> Generation -> Evaluation)
+ * - Manages the feedback loop for query reformulation and retries
+ * - Maintains conversation history
+ * - Emits real-time progress events for UI visualization
+ */
 export class AgenticRAGOrchestrator {
   private router: AgenticQueryRouter
   private executor: RetrievalExecutor
   private reflector: SelfReflectiveRAG
   private tracker: StrategyPerformanceTracker
   private conversationHistory: Array<{ query: string; response: string }> = []
-  
+
   constructor(
     private documents: Document[],
     private knowledgeBaseName: string,
@@ -76,7 +88,7 @@ export class AgenticRAGOrchestrator {
     this.reflector = new SelfReflectiveRAG()
     this.tracker = new StrategyPerformanceTracker()
   }
-  
+
   private emitProgress(config: AgenticRAGConfig, step: Omit<ProgressStep, 'timestamp'>) {
     if (config.onProgress) {
       config.onProgress({
@@ -93,24 +105,24 @@ export class AgenticRAGOrchestrator {
   private calculateSemanticSimilarity(query1: string, query2: string): number {
     const words1 = query1.toLowerCase().split(/\s+/).filter(w => w.length > 3)
     const words2 = query2.toLowerCase().split(/\s+/).filter(w => w.length > 3)
-    
+
     if (words1.length === 0 || words2.length === 0) return 0
-    
+
     const set1 = new Set(words1)
     const set2 = new Set(words2)
     const intersection = new Set([...set1].filter(x => set2.has(x)))
     const union = new Set([...set1, ...set2])
-    
+
     const jaccardSimilarity = intersection.size / union.size
-    
+
     const longerLength = Math.max(query1.length, query2.length)
     const shorterLength = Math.min(query1.length, query2.length)
     const lengthSimilarity = shorterLength / longerLength
-    
+
     const commonStarts = query1.toLowerCase().startsWith(query2.toLowerCase().substring(0, 5)) ||
-                         query2.toLowerCase().startsWith(query1.toLowerCase().substring(0, 5))
+      query2.toLowerCase().startsWith(query1.toLowerCase().substring(0, 5))
     const positionBonus = commonStarts ? 0.15 : 0
-    
+
     return Math.min(1, jaccardSimilarity * 0.7 + lengthSimilarity * 0.3 + positionBonus)
   }
 
@@ -124,12 +136,12 @@ export class AgenticRAGOrchestrator {
     const enableCriticism = config.enableCriticism !== false
     const enableAutoRetry = config.enableAutoRetry !== false
     const topK = config.topK || 5
-    
+
     let iteration = 0
     let currentQuery = userQuery
     const reformulations: QueryReformulation[] = []
     const originalId = this.generateId()
-    
+
     reformulations.push({
       id: originalId,
       query: userQuery,
@@ -142,10 +154,10 @@ export class AgenticRAGOrchestrator {
     let answer = ''
     let evaluation: SelfEvaluation | null = null
     let criticism: CriticFeedback | undefined
-    
+
     while (iteration < maxIterations) {
       iteration++
-      
+
       this.emitProgress(config, {
         phase: 'routing',
         status: 'in_progress',
@@ -153,14 +165,14 @@ export class AgenticRAGOrchestrator {
         details: 'Understanding query intent, complexity, and optimal strategy...',
         progress: 10
       })
-      
+
       routing = await this.router.routeQuery(
         currentQuery,
         this.knowledgeBaseName,
         this.documents.length,
         this.conversationHistory
       )
-      
+
       this.emitProgress(config, {
         phase: 'routing',
         status: 'complete',
@@ -173,7 +185,7 @@ export class AgenticRAGOrchestrator {
           needsRetrieval: routing.needsRetrieval
         }
       })
-      
+
       if (iteration === 1) {
         this.emitProgress(config, {
           phase: 'routing',
@@ -182,17 +194,17 @@ export class AgenticRAGOrchestrator {
           details: 'Analyzing past queries to optimize strategy selection...',
           progress: 25
         })
-        
+
         const recommendation = await this.tracker.getStrategyRecommendation(
           currentQuery,
           routing.intent,
           this.documents.length
         )
-        
+
         if (recommendation.basedOnHistoricalData && recommendation.confidence > 0.7) {
           routing.strategy = recommendation.recommendedStrategy
           routing.reasoning = `${routing.reasoning} (Using learned strategy: ${recommendation.reasoning})`
-          
+
           this.emitProgress(config, {
             phase: 'routing',
             status: 'complete',
@@ -203,7 +215,7 @@ export class AgenticRAGOrchestrator {
           })
         }
       }
-      
+
       if (routing.intent === 'chitchat' || !routing.needsRetrieval) {
         this.emitProgress(config, {
           phase: 'generation',
@@ -212,9 +224,9 @@ export class AgenticRAGOrchestrator {
           details: 'No retrieval needed for this query type',
           progress: 60
         })
-        
+
         answer = await this.generateDirectAnswer(currentQuery, routing.intent)
-        
+
         evaluation = {
           relevanceToken: 'RELEVANT',
           supportToken: 'FULLY_SUPPORTED',
@@ -223,17 +235,17 @@ export class AgenticRAGOrchestrator {
           needsRetry: false,
           reasoning: 'Direct answer without retrieval'
         }
-        
+
         this.emitProgress(config, {
           phase: 'complete',
           status: 'complete',
           message: 'Response generated',
           progress: 100
         })
-        
+
         break
       }
-      
+
       this.emitProgress(config, {
         phase: 'routing',
         status: 'in_progress',
@@ -241,7 +253,7 @@ export class AgenticRAGOrchestrator {
         details: 'Evaluating query clarity and specificity...',
         progress: 32
       })
-      
+
       const clarification = await this.router.shouldClarify(currentQuery, this.documents.length)
       if (clarification.needsClarification && iteration === 1) {
         this.emitProgress(config, {
@@ -252,9 +264,9 @@ export class AgenticRAGOrchestrator {
           progress: 100,
           metadata: { needsClarification: true }
         })
-        
+
         answer = clarification.clarificationQuestion || 'Could you please provide more details about your question?'
-        
+
         evaluation = {
           relevanceToken: 'PARTIALLY_RELEVANT',
           supportToken: 'NOT_SUPPORTED',
@@ -263,7 +275,7 @@ export class AgenticRAGOrchestrator {
           needsRetry: false,
           reasoning: 'Query too vague, requesting clarification'
         }
-        
+
         routing.reasoning = 'Query requires clarification'
         retrieval = {
           documents: [],
@@ -271,16 +283,16 @@ export class AgenticRAGOrchestrator {
           method: 'direct_answer',
           queryUsed: currentQuery
         }
-        
+
         break
       }
-      
+
       let subQueries: string[] | undefined
       let currentParentId = reformulations[reformulations.length - 1].id
-      
+
       if (routing && routing.strategy === 'multi_query' && routing.subQueries) {
         subQueries = routing.subQueries
-        
+
         subQueries.forEach((subQuery, index) => {
           const subQueryId = this.generateId()
           const similarity = this.calculateSemanticSimilarity(currentQuery, subQuery)
@@ -297,7 +309,7 @@ export class AgenticRAGOrchestrator {
             similarity
           })
         })
-        
+
         this.emitProgress(config, {
           phase: 'retrieval',
           status: 'in_progress',
@@ -314,9 +326,9 @@ export class AgenticRAGOrchestrator {
           details: 'Breaking complex query into simpler components...',
           progress: 35
         })
-        
+
         subQueries = await this.router.generateSubQueries(currentQuery)
-        
+
         subQueries.forEach((subQuery, index) => {
           const subQueryId = this.generateId()
           const similarity = this.calculateSemanticSimilarity(currentQuery, subQuery)
@@ -333,7 +345,7 @@ export class AgenticRAGOrchestrator {
             similarity
           })
         })
-        
+
         this.emitProgress(config, {
           phase: 'retrieval',
           status: 'complete',
@@ -343,7 +355,7 @@ export class AgenticRAGOrchestrator {
           metadata: { subQueries }
         })
       }
-      
+
       this.emitProgress(config, {
         phase: 'retrieval',
         status: 'in_progress',
@@ -351,7 +363,7 @@ export class AgenticRAGOrchestrator {
         details: `Searching ${this.documents.length} documents with top-${topK} results...`,
         progress: 45
       })
-      
+
       retrieval = await this.executor.executeRetrieval(
         currentQuery,
         this.documents,
@@ -359,7 +371,18 @@ export class AgenticRAGOrchestrator {
         topK,
         subQueries
       )
-      
+
+      if (retrieval.method === 'rag_fusion' && retrieval.metadata?.ragFusionVariations) {
+        this.emitProgress(config, {
+          phase: 'retrieval',
+          status: 'complete',
+          message: 'RAG Fusion variations generated',
+          details: `Generated ${retrieval.metadata.ragFusionVariations.length} variations for broader coverage`,
+          progress: 50,
+          metadata: { subQueries: retrieval.metadata.ragFusionVariations }
+        })
+      }
+
       this.emitProgress(config, {
         phase: 'retrieval',
         status: 'complete',
@@ -371,7 +394,7 @@ export class AgenticRAGOrchestrator {
           method: retrieval.method
         }
       })
-      
+
       this.emitProgress(config, {
         phase: 'retrieval',
         status: 'in_progress',
@@ -379,13 +402,13 @@ export class AgenticRAGOrchestrator {
         details: 'Checking document relevance and coverage...',
         progress: 58
       })
-      
+
       const qualityCheck = this.router.evaluateRetrievalQuality(
         retrieval.documents,
         currentQuery,
         topK
       )
-      
+
       if (qualityCheck.needsFallback && routing.fallbackStrategies && iteration < maxIterations) {
         this.emitProgress(config, {
           phase: 'retrieval',
@@ -395,16 +418,16 @@ export class AgenticRAGOrchestrator {
           progress: 62,
           metadata: { fallbackStrategy: routing.fallbackStrategies[0] }
         })
-        
+
         const fallbackStrategy = routing.fallbackStrategies[0]
-        
+
         retrieval = await this.executor.executeRetrieval(
           currentQuery,
           this.documents,
           fallbackStrategy,
           topK
         )
-        
+
         this.emitProgress(config, {
           phase: 'retrieval',
           status: 'complete',
@@ -414,7 +437,7 @@ export class AgenticRAGOrchestrator {
           metadata: { documentsFound: retrieval.documents.length }
         })
       }
-      
+
       this.emitProgress(config, {
         phase: 'generation',
         status: 'in_progress',
@@ -422,9 +445,9 @@ export class AgenticRAGOrchestrator {
         details: 'Synthesizing information from retrieved documents...',
         progress: 70
       })
-      
+
       answer = await this.generateAnswer(currentQuery, retrieval)
-      
+
       this.emitProgress(config, {
         phase: 'generation',
         status: 'complete',
@@ -433,7 +456,7 @@ export class AgenticRAGOrchestrator {
         progress: 78,
         metadata: { responseLength: answer.length }
       })
-      
+
       this.emitProgress(config, {
         phase: 'evaluation',
         status: 'in_progress',
@@ -441,13 +464,13 @@ export class AgenticRAGOrchestrator {
         details: 'Checking relevance, support, and utility...',
         progress: 80
       })
-      
+
       evaluation = await this.reflector.performSelfEvaluation(
         currentQuery,
         answer,
         retrieval
       )
-      
+
       this.emitProgress(config, {
         phase: 'evaluation',
         status: 'complete',
@@ -460,7 +483,7 @@ export class AgenticRAGOrchestrator {
           support: evaluation.supportToken
         }
       })
-      
+
       if (enableCriticism) {
         this.emitProgress(config, {
           phase: 'criticism',
@@ -469,13 +492,13 @@ export class AgenticRAGOrchestrator {
           details: 'Checking logical consistency, accuracy, and completeness...',
           progress: 88
         })
-        
+
         criticism = await this.reflector.criticResponse(
           currentQuery,
           answer,
           retrieval.documents
         )
-        
+
         this.emitProgress(config, {
           phase: 'criticism',
           status: 'complete',
@@ -489,7 +512,7 @@ export class AgenticRAGOrchestrator {
           }
         })
       }
-      
+
       if (evaluation.confidence >= confidenceThreshold || !enableAutoRetry) {
         this.emitProgress(config, {
           phase: 'complete',
@@ -501,7 +524,7 @@ export class AgenticRAGOrchestrator {
         })
         break
       }
-      
+
       if (iteration < maxIterations && evaluation.needsRetry) {
         this.emitProgress(config, {
           phase: 'retry',
@@ -510,9 +533,9 @@ export class AgenticRAGOrchestrator {
           details: 'Determining if retry can improve response...',
           progress: 94
         })
-        
+
         const improvements = await this.reflector.suggestImprovements(evaluation, criticism)
-        
+
         if (improvements.shouldRetry) {
           this.emitProgress(config, {
             phase: 'retry',
@@ -522,18 +545,18 @@ export class AgenticRAGOrchestrator {
             progress: 96,
             metadata: { improvements: improvements.actions }
           })
-          
+
           const previousQueryId = reformulations[reformulations.length - 1].id
           currentQuery = await this.reformulateQuery(userQuery, evaluation, improvements.actions)
-          
+
           const reformulationId = this.generateId()
           const reformulationType = improvements.actions.some(a => a.includes('expand')) ? 'expansion' :
-                                   improvements.actions.some(a => a.includes('simplif')) ? 'simplification' :
-                                   'reformulation'
-          
+            improvements.actions.some(a => a.includes('simplif')) ? 'simplification' :
+              'reformulation'
+
           const previousQuery = reformulations[reformulations.length - 1].query
           const similarity = this.calculateSemanticSimilarity(previousQuery, currentQuery)
-          
+
           reformulations.push({
             id: reformulationId,
             query: currentQuery,
@@ -546,7 +569,7 @@ export class AgenticRAGOrchestrator {
             linkType: 'refined',
             similarity
           })
-          
+
           this.emitProgress(config, {
             phase: 'retry',
             status: 'complete',
@@ -554,7 +577,7 @@ export class AgenticRAGOrchestrator {
             details: 'Starting new iteration with improved query...',
             progress: 5
           })
-          
+
           continue
         } else {
           this.emitProgress(config, {
@@ -578,20 +601,20 @@ export class AgenticRAGOrchestrator {
         break
       }
     }
-    
+
     if (!routing || !retrieval || !evaluation) {
       throw new Error('RAG orchestration failed')
     }
-    
+
     this.conversationHistory.push({ query: userQuery, response: answer })
     if (this.conversationHistory.length > 5) {
       this.conversationHistory.shift()
     }
-    
+
     const totalTimeMs = Date.now() - startTime
-    
+
     const improvements = await this.reflector.suggestImprovements(evaluation, criticism)
-    
+
     const response: AgenticRAGResponse = {
       answer,
       sources: retrieval.documents.map(d => d.title),
@@ -609,40 +632,40 @@ export class AgenticRAGOrchestrator {
         improvementSuggestions: improvements.actions.length > 0 ? improvements.actions : undefined
       }
     }
-    
+
     await this.tracker.recordQueryPerformance(userQuery, response)
-    
+
     return response
   }
-  
+
   private async generateDirectAnswer(query: string, intent: QueryIntent): Promise<string> {
     if (intent === 'chitchat') {
       const prompt = `Respond naturally to this casual message: "${query}"
 
 Keep it brief and friendly.`
-      
+
       return await window.spark.llm(prompt, 'gpt-4o-mini')
     }
-    
+
     if (intent === 'out_of_scope') {
       return `I'm a specialized assistant for the "${this.knowledgeBaseName}" knowledge base. Your question appears to be outside my area of expertise. Could you ask something related to the available documents?`
     }
-    
+
     return `I don't have enough information to answer that question based on the current knowledge base.`
   }
-  
+
   private async generateAnswer(query: string, retrieval: RetrievalResult): Promise<string> {
     if (retrieval.documents.length === 0) {
       return `I couldn't find relevant information in the knowledge base to answer your question about: "${query}". The knowledge base may not contain documents on this topic.`
     }
-    
+
     const context = retrieval.documents
       .map((doc, i) => {
         const score = retrieval.scores[i]
         return `[${i + 1}] ${doc.title} (relevance: ${score.toFixed(2)})\n${doc.content.slice(0, 800)}`
       })
       .join('\n\n---\n\n')
-    
+
     const prompt = `You are a helpful AI assistant with access to the "${this.knowledgeBaseName}" knowledge base.
 
 Answer the user's question based ONLY on the provided context. Be accurate and cite sources by number.
@@ -662,7 +685,7 @@ Answer:`
 
     return await window.spark.llm(prompt, 'gpt-4o')
   }
-  
+
   private async reformulateQuery(
     originalQuery: string,
     evaluation: SelfEvaluation,
@@ -692,11 +715,11 @@ Respond with ONLY the reformulated query, no explanation.`
       return originalQuery
     }
   }
-  
+
   getConversationHistory(): Array<{ query: string; response: string }> {
     return [...this.conversationHistory]
   }
-  
+
   clearHistory(): void {
     this.conversationHistory = []
   }
