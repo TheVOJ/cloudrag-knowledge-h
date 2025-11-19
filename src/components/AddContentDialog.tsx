@@ -14,10 +14,11 @@ interface AddContentDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onAdd: (sourceType: SourceType, sourceUrl: string) => Promise<void>
+  onShowFileUpload: () => void
 }
 
-export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialogProps) {
-  const [sourceType, setSourceType] = useState<SourceType>('web')
+export function AddContentDialog({ open, onOpenChange, onAdd, onShowFileUpload }: AddContentDialogProps) {
+  const [sourceType, setSourceType] = useState<SourceType | 'file'>('file')
   const [url, setUrl] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -25,6 +26,12 @@ export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialog
   const [statusMessage, setStatusMessage] = useState<string>('')
   
   const handleSubmit = async () => {
+    if (sourceType === 'file') {
+      onOpenChange(false)
+      onShowFileUpload()
+      return
+    }
+    
     if (!url.trim()) return
     
     setIsProcessing(true)
@@ -70,6 +77,8 @@ export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialog
   
   const getPlaceholder = () => {
     switch (sourceType) {
+      case 'file':
+        return ''
       case 'web':
         return 'https://example.com/docs'
       case 'github':
@@ -89,14 +98,31 @@ export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialog
         </DialogHeader>
         
         <Tabs value={sourceType} onValueChange={(v) => setSourceType(v as SourceType)}>
-          <TabsList className="grid grid-cols-4 w-full">
-            {(['web', 'github', 'onedrive', 'dropbox'] as SourceType[]).map((type) => (
+          <TabsList className="grid grid-cols-5 w-full">
+            {(['file', 'web', 'github', 'onedrive', 'dropbox'] as const).map((type) => (
               <TabsTrigger key={type} value={type} className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3">
-                <span className="text-sm sm:text-base">{getSourceIcon(type)}</span>
-                <span className="hidden sm:inline">{getSourceLabel(type).split(' ')[0]}</span>
+                <span className="text-sm sm:text-base">
+                  {type === 'file' ? '📄' : getSourceIcon(type as SourceType)}
+                </span>
+                <span className="hidden sm:inline">
+                  {type === 'file' ? 'Upload' : getSourceLabel(type as SourceType).split(' ')[0]}
+                </span>
               </TabsTrigger>
             ))}
           </TabsList>
+          
+          <TabsContent value="file" className="space-y-3 sm:space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Upload PDF or Word documents directly from your computer. Multiple files are supported.
+              </p>
+              <Alert>
+                <AlertDescription className="text-xs">
+                  💡 Click the "Upload Files" button below to select PDF (.pdf) or Word (.doc, .docx) documents
+                </AlertDescription>
+              </Alert>
+            </div>
+          </TabsContent>
           
           {(['web', 'github', 'onedrive', 'dropbox'] as SourceType[]).map((type) => (
             <TabsContent key={type} value={type} className="space-y-3 sm:space-y-4">
@@ -143,8 +169,8 @@ export function AddContentDialog({ open, onOpenChange, onAdd }: AddContentDialog
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isProcessing} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!url.trim() || isProcessing} className="w-full sm:w-auto">
-            {isProcessing ? 'Processing...' : 'Add Content'}
+          <Button onClick={handleSubmit} disabled={(sourceType !== 'file' && !url.trim()) || isProcessing} className="w-full sm:w-auto">
+            {sourceType === 'file' ? 'Upload Files' : (isProcessing ? 'Processing...' : 'Add Content')}
           </Button>
         </DialogFooter>
       </DialogContent>

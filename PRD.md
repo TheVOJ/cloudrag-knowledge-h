@@ -20,11 +20,18 @@ A knowledge base management system that allows users to create, organize, and qu
 - **Success criteria**: Knowledge base appears in list, can be edited/deleted, persists across sessions
 
 ### Document Ingestion (Real Implementation)
-- **Functionality**: Add content to knowledge bases through real web scraping, GitHub API integration, and simulated cloud storage sources
+- **Functionality**: Add content to knowledge bases through real web scraping, GitHub API integration, direct PDF/Word document upload, and cloud storage sources
 - **Purpose**: Build comprehensive indexes from diverse content sources for RAG queries with actual data extraction
 - **Trigger**: User selects a knowledge base and clicks "Add Content"
-- **Progression**: Select knowledge base → Choose source type (Web/GitHub/OneDrive/Dropbox) → Provide URL → System fetches and parses content → Extract metadata → Confirm addition → View indexed documents
-- **Success criteria**: Real web content extracted with proper parsing, GitHub repositories fetched via API with file contents, metadata extracted, searchable within knowledge base
+- **Progression**: Select knowledge base → Choose source type (Upload/Web/GitHub/OneDrive/Dropbox) → Provide files/URL → System fetches and parses content → Extract metadata → Confirm addition → View indexed documents
+- **Success criteria**: Real web content extracted with proper parsing, GitHub repositories fetched via API with file contents, PDF and Word documents parsed locally in browser, metadata extracted, searchable within knowledge base
+
+### PDF and Word Document Upload
+- **Functionality**: Upload and parse PDF (.pdf) and Word (.doc, .docx) documents directly from user's computer
+- **Purpose**: Enable users to quickly add local documents without external URLs or APIs
+- **Trigger**: User selects "Upload" tab in add content dialog
+- **Progression**: Select files (drag-drop or browse) → Preview file list → Click upload → Parse each file locally → Extract text and metadata → Index documents → Confirm completion
+- **Success criteria**: Multiple file upload support, real-time parsing progress, PDF text extraction with page count, Word document text extraction, metadata capture (size, author, type), browser-based parsing for privacy
 
 ### Real Web Scraping
 - **Functionality**: Fetch and parse actual web pages, extracting title, main content, and metadata

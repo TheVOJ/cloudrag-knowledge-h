@@ -26,7 +26,9 @@ export function getSourceIcon(sourceType: SourceType): string {
     web: '🌐',
     github: '📁',
     onedrive: '☁️',
-    dropbox: '📦'
+    dropbox: '📦',
+    pdf: '📄',
+    docx: '📝'
   }
   return icons[sourceType]
 }
@@ -36,7 +38,9 @@ export function getSourceLabel(sourceType: SourceType): string {
     web: 'Web Content',
     github: 'GitHub Repository',
     onedrive: 'OneDrive',
-    dropbox: 'Dropbox'
+    dropbox: 'Dropbox',
+    pdf: 'PDF Document',
+    docx: 'Word Document'
   }
   return labels[sourceType]
 }
@@ -55,7 +59,9 @@ export function simulateDocumentExtraction(sourceType: SourceType, sourceUrl: st
     web: `Content from ${extractDomain(sourceUrl)}`,
     github: `Repository: ${sourceUrl.split('/').pop()}`,
     onedrive: `Document from OneDrive`,
-    dropbox: `File from Dropbox`
+    dropbox: `File from Dropbox`,
+    pdf: `PDF: ${sourceUrl}`,
+    docx: `Word: ${sourceUrl}`
   }
   
   const markdownContent = `# ${titles[sourceType]}

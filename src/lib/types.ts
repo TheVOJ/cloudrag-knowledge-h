@@ -1,4 +1,4 @@
-export type SourceType = 'web' | 'github' | 'onedrive' | 'dropbox'
+export type SourceType = 'web' | 'github' | 'onedrive' | 'dropbox' | 'pdf' | 'docx'
 
 export interface Document {
   id: string

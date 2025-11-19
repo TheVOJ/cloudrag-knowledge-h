@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { KnowledgeBaseCard } from '@/components/KnowledgeBaseCard'
 import { CreateKnowledgeBaseDialog } from '@/components/CreateKnowledgeBaseDialog'
 import { AddContentDialog } from '@/components/AddContentDialog'
+import { FileUploadDialog } from '@/components/FileUploadDialog'
 import { DocumentListItem } from '@/components/DocumentListItem'
 import { DocumentViewerDialog } from '@/components/DocumentViewerDialog'
 import { QueryInterface } from '@/components/QueryInterface'
@@ -45,6 +46,7 @@ function App() {
   const [selectedKB, setSelectedKB] = useState<KnowledgeBase | null>(null)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showAddContentDialog, setShowAddContentDialog] = useState(false)
+  const [showFileUploadDialog, setShowFileUploadDialog] = useState(false)
   const [viewingDocument, setViewingDocument] = useState<Document | null>(null)
   const [showDocumentViewer, setShowDocumentViewer] = useState(false)
   const [showAzureSettings, setShowAzureSettings] = useState(false)
@@ -196,6 +198,77 @@ function App() {
       toast.success(`${newDocs.length} document(s) added successfully`)
     } catch (error) {
       toast.error('Failed to add content: ' + (error instanceof Error ? error.message : 'Unknown error'))
+      throw error
+    }
+  }
+  
+  const handleFileUpload = async (files: Array<{ title: string; content: string; metadata: any; fileName: string }>) => {
+    if (!selectedKB) return
+    
+    toast.info(`Processing ${files.length} file(s)...`)
+    
+    try {
+      const newDocs: Document[] = files.map(file => ({
+        id: generateId(),
+        title: file.title,
+        content: file.content,
+        sourceType: (file.metadata.fileType === 'pdf' ? 'pdf' : 'docx') as SourceType,
+        sourceUrl: file.fileName,
+        addedAt: Date.now(),
+        metadata: file.metadata
+      }))
+      
+      setDocuments((current) => [...(current || []), ...newDocs])
+      
+      if (selectedKB.azureSearchEnabled && selectedKB.azureIndexName && azureSettings?.enabled) {
+        try {
+          const service = new AzureSearchService({
+            endpoint: azureSettings.endpoint,
+            apiKey: azureSettings.apiKey,
+            indexName: selectedKB.azureIndexName,
+          })
+          await service.indexDocuments(newDocs)
+          toast.success(`${newDocs.length} document(s) indexed in Azure AI Search`)
+        } catch (error) {
+          toast.error('Failed to index in Azure: ' + (error instanceof Error ? error.message : 'Unknown error'))
+        }
+      }
+      
+      setKnowledgeBases((current) =>
+        (current || []).map(kb => {
+          if (kb.id === selectedKB.id) {
+            const pdfSource: SourceType = 'pdf'
+            const docxSource: SourceType = 'docx'
+            const newSources = new Set(kb.sources)
+            newDocs.forEach(doc => newSources.add(doc.sourceType))
+            
+            return {
+              ...kb,
+              documentCount: kb.documentCount + newDocs.length,
+              sources: Array.from(newSources),
+              updatedAt: Date.now()
+            }
+          }
+          return kb
+        })
+      )
+      
+      setSelectedKB((current) => {
+        if (!current) return null
+        const newSources = new Set(current.sources)
+        newDocs.forEach(doc => newSources.add(doc.sourceType))
+        
+        return {
+          ...current,
+          documentCount: current.documentCount + newDocs.length,
+          sources: Array.from(newSources),
+          updatedAt: Date.now()
+        }
+      })
+      
+      toast.success(`${newDocs.length} document(s) uploaded successfully`)
+    } catch (error) {
+      toast.error('Failed to upload files: ' + (error instanceof Error ? error.message : 'Unknown error'))
       throw error
     }
   }
@@ -667,6 +740,13 @@ function App() {
         open={showAddContentDialog}
         onOpenChange={setShowAddContentDialog}
         onAdd={handleAddContent}
+        onShowFileUpload={() => setShowFileUploadDialog(true)}
+      />
+      
+      <FileUploadDialog
+        open={showFileUploadDialog}
+        onOpenChange={setShowFileUploadDialog}
+        onUpload={handleFileUpload}
       />
       
       <DocumentViewerDialog
