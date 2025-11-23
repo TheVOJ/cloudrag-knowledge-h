@@ -4,10 +4,11 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { MagnifyingGlass, Sparkle, Lightning } from '@phosphor-icons/react'
+import { MagnifyingGlass, Brain, Lightning } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { AzureSearchService, SearchResult } from '@/lib/azure-search'
 import { AzureSearchSettings } from '@/lib/types'
+import { runtime } from '@/lib/runtime/manager'
 
 interface QueryInterfaceProps {
   knowledgeBaseName: string
@@ -81,7 +82,7 @@ User Question: ${query}
 
 Provide a helpful answer based on the context above. If the context doesn't contain relevant information, say so.`
       
-      const aiResponse = await window.spark.llm(prompt, 'gpt-4o-mini')
+      const aiResponse = await runtime.llm.generate(prompt, 'gpt-4o-mini')
       setResponse(aiResponse)
       setSources(results.map((r) => r.title))
       onQuery(query, aiResponse, results.map((r) => r.title), 'azure')
@@ -119,7 +120,7 @@ User Question: ${query}
 Provide a helpful answer based on the context above. If the context doesn't contain relevant information, say so.`
     
     try {
-      const aiResponse = await window.spark.llm(prompt, 'gpt-4o-mini')
+      const aiResponse = await runtime.llm.generate(prompt, 'gpt-4o-mini')
       setResponse(aiResponse)
       setSources(relevantDocs.map(doc => doc.title))
       onQuery(query, aiResponse, relevantDocs.map(doc => doc.title), 'simulated')
@@ -168,7 +169,7 @@ Provide a helpful answer based on the context above. If the context doesn't cont
             {isAzureEnabled ? (
               <Lightning size={16} weight="duotone" />
             ) : (
-              <Sparkle size={16} weight="duotone" />
+              <Brain size={16} weight="duotone" />
             )}
             <span>{isLoading ? 'Searching...' : (isAzureEnabled ? 'Azure Search' : 'Ask AI')}</span>
           </Button>
@@ -191,7 +192,7 @@ Provide a helpful answer based on the context above. If the context doesn't cont
           <Card className="p-4 sm:p-6">
             <div className="flex items-center gap-2 mb-3 sm:mb-4">
               <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
-                <Sparkle size={14} className="sm:w-4 sm:h-4 text-accent" weight="duotone" />
+                <Brain size={14} className="sm:w-4 sm:h-4 text-accent" weight="duotone" />
               </div>
               <h3 className="font-semibold text-sm sm:text-base">AI Response</h3>
               {searchMethod === 'azure' && !isLoading && (

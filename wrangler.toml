@@ -1,0 +1,39 @@
+name = "cloudrag-knowledge-h"
+main = "worker/index.ts"
+compatibility_date = "2025-01-23"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+# Workers AI binding
+[ai]
+binding = "AI"
+
+# KV namespace binding
+[[kv_namespaces]]
+binding = "KV"
+id = "7565fefa569144f7bc5907edbffc8d18"
+
+# Asset binding for serving the Vite build
+[assets]
+binding = "ASSETS"
+directory = "dist"
+
+# Environment variables (use wrangler secret for sensitive values)
+[vars]
+ENVIRONMENT = "production"
+
+# Development environment
+[env.development]
+name = "cloudrag-knowledge-h-dev"
+
+[env.development.ai]
+binding = "AI"
+
+[[env.development.kv_namespaces]]
+binding = "KV"
+id = "70acbfed268c4fb49736e1d2e968ea96"
+
+[env.development.vars]
+ENVIRONMENT = "development"

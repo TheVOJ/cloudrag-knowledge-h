@@ -14,18 +14,31 @@ export interface ScrapedContent {
 }
 
 export async function scrapeWebContent(url: string): Promise<ScrapedContent> {
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; RAG-KnowledgeBase/1.0)',
-    },
-  })
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; RAG-KnowledgeBase/1.0)',
+      },
+    })
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`)
+    }
+
+    const html = await response.text()
+    return parseHTML(html, url)
+  } catch (error) {
+    // CORS or network error - provide helpful message
+    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+      throw new Error(
+        'CORS Error: This website blocks direct scraping. Try:\n' +
+        '1. Upload the page as a file instead\n' +
+        '2. Use GitHub if the content is on GitHub\n' +
+        '3. Copy/paste the content directly'
+      )
+    }
+    throw error
   }
-
-  const html = await response.text()
-  return parseHTML(html, url)
 }
 
 function parseHTML(html: string, sourceUrl: string): ScrapedContent {
@@ -182,7 +195,7 @@ function extractMetadata(doc: globalThis.Document, content: string): ScrapedCont
 export function convertToDocument(
   scraped: ScrapedContent,
   sourceUrl: string
-): Omit<DocType, 'id' | 'addedAt'> {
+): Omit<DocType, 'id' | 'addedAt' | 'knowledgeBaseId'> {
   return {
     title: scraped.title,
     content: scraped.content,

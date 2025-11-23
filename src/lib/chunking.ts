@@ -1,3 +1,5 @@
+import { runtime } from './runtime/manager'
+
 export interface Chunk {
   id: string
   text: string
@@ -142,8 +144,8 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   try {
     const truncatedText = text.substring(0, 1000)
     const prompt = `Generate a semantic embedding representation for the following text. Return only a JSON object with a single property "embedding" containing an array of 384 floating point numbers between -1 and 1: ${truncatedText}`
-    
-    const result = await window.spark.llm(prompt, 'gpt-4o-mini', true)
+
+    const result = await runtime.llm.generate(prompt, 'gpt-4o-mini', true)
     const parsed = JSON.parse(result)
     
     if (parsed.embedding && Array.isArray(parsed.embedding)) {

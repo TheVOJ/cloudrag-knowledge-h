@@ -108,17 +108,32 @@ async function fetchRepoTree(
   apiBase: string,
   branch: string
 ): Promise<Array<{ path: string; type: string; sha: string }>> {
-  const response = await fetch(`${apiBase}/git/trees/${branch}?recursive=1`, {
+  // First, get the branch reference to find the commit SHA
+  const branchResponse = await fetch(`${apiBase}/git/ref/heads/${branch}`, {
     headers: {
       Accept: 'application/vnd.github.v3+json',
     },
   })
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch repository tree: ${response.status}`)
+  if (!branchResponse.ok) {
+    throw new Error(`Failed to fetch branch reference: ${branchResponse.status}`)
   }
 
-  const data = await response.json()
+  const branchData = await branchResponse.json()
+  const commitSha = branchData.object.sha
+
+  // Now fetch the tree using the commit SHA
+  const treeResponse = await fetch(`${apiBase}/git/trees/${commitSha}?recursive=1`, {
+    headers: {
+      Accept: 'application/vnd.github.v3+json',
+    },
+  })
+
+  if (!treeResponse.ok) {
+    throw new Error(`Failed to fetch repository tree: ${treeResponse.status}`)
+  }
+
+  const data = await treeResponse.json()
   return data.tree || []
 }
 
@@ -175,8 +190,8 @@ function shouldIncludeFile(path: string): boolean {
   return SUPPORTED_EXTENSIONS.includes(extension)
 }
 
-export function convertRepoToDocuments(repoContent: RepoContent, repoUrl: string): Omit<DocType, 'id' | 'addedAt'>[] {
-  const documents: Omit<DocType, 'id' | 'addedAt'>[] = []
+export function convertRepoToDocuments(repoContent: RepoContent, repoUrl: string): Omit<DocType, 'id' | 'addedAt' | 'knowledgeBaseId'>[] {
+  const documents: Omit<DocType, 'id' | 'addedAt' | 'knowledgeBaseId'>[] = []
 
   if (repoContent.readme) {
     documents.push({

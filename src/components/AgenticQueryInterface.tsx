@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
 import {
   MagnifyingGlass,
-  Sparkle,
+  Cloud,
   Lightning,
   Brain,
   TreeStructure,
@@ -27,6 +27,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Document, AzureSearchSettings } from '@/lib/types'
 import { AgenticRAGOrchestrator, AgenticRAGResponse, ProgressStep } from '@/lib/agentic-rag-orchestrator'
 import { StrategyPerformanceTracker } from '@/lib/strategy-performance-tracker'
+import { ConversationManager, Conversation } from '@/lib/conversation-manager'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { AgenticFlowDiagram } from '@/components/AgenticFlowDiagram'
@@ -59,6 +60,9 @@ export function AgenticQueryInterface({
   const [tracker] = useState(() => new StrategyPerformanceTracker())
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([])
   const [currentProgress, setCurrentProgress] = useState(0)
+  const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null)
+  const [conversationManager] = useState(() => new ConversationManager())
+  const [orchestrator, setOrchestrator] = useState<AgenticRAGOrchestrator | null>(null)
 
   const calculateSemanticSimilarity = (query1: string, query2: string): number => {
     const words1 = query1.toLowerCase().split(/\s+/).filter(w => w.length > 3)
@@ -84,6 +88,28 @@ export function AgenticQueryInterface({
     return Math.min(1, jaccardSimilarity * 0.7 + lengthSimilarity * 0.3 + positionBonus)
   }
 
+  // Initialize conversation on mount
+  useEffect(() => {
+    const initConversation = async () => {
+      // Create new conversation for this knowledge base
+      const conversation = await conversationManager.createConversation(knowledgeBaseName)
+      setCurrentConversation(conversation)
+
+      // Create orchestrator with conversation history
+      const history = conversationManager.getConversationHistory(conversation)
+      const newOrchestrator = new AgenticRAGOrchestrator(
+        documents,
+        knowledgeBaseName,
+        azureSettings,
+        indexName,
+        history
+      )
+      setOrchestrator(newOrchestrator)
+    }
+
+    initConversation()
+  }, [knowledgeBaseName]) // Only reinitialize when knowledge base changes
+
   useEffect(() => {
     if (!response?.answer) {
       setDisplayedText('')
@@ -105,7 +131,7 @@ export function AgenticQueryInterface({
   }, [response?.answer])
 
   const handleAgenticSearch = async () => {
-    if (!query.trim()) return
+    if (!query.trim() || !orchestrator || !currentConversation) return
 
     setIsLoading(true)
     setResponse(null)
@@ -114,15 +140,17 @@ export function AgenticQueryInterface({
     setProgressSteps([])
     setCurrentProgress(0)
 
+    const currentQuery = query
+
     try {
-      const orchestrator = new AgenticRAGOrchestrator(
-        documents,
-        knowledgeBaseName,
-        azureSettings,
-        indexName
+      // Add user message to conversation
+      await conversationManager.addMessage(
+        currentConversation.id,
+        'user',
+        currentQuery
       )
 
-      const result = await orchestrator.query(query, {
+      const result = await orchestrator.query(currentQuery, {
         maxIterations: 3,
         confidenceThreshold: 0.6,
         enableCriticism: true,
@@ -136,6 +164,20 @@ export function AgenticQueryInterface({
         }
       })
 
+      // Add assistant response to conversation
+      const updatedConversation = await conversationManager.addMessage(
+        currentConversation.id,
+        'assistant',
+        result.answer,
+        {
+          intent: result.routing.intent,
+          confidence: result.evaluation.confidence,
+          sources: result.sources,
+          iterations: result.iterations
+        }
+      )
+
+      setCurrentConversation(updatedConversation)
       setResponse(result)
 
       const history = await tracker.getQueryHistory()
@@ -144,7 +186,7 @@ export function AgenticQueryInterface({
         setQueryId(latestQuery.id)
       }
 
-      onQuery(query, result.answer, result.sources, 'agentic')
+      onQuery(currentQuery, result.answer, result.sources, 'agentic')
     } catch (error) {
       console.error('Agentic RAG error:', error)
       setResponse({
@@ -184,6 +226,7 @@ export function AgenticQueryInterface({
     }
 
     setIsLoading(false)
+    setQuery('') // Clear input for next query
   }
 
   const handleFeedback = async (feedback: 'positive' | 'negative' | 'neutral') => {
@@ -237,7 +280,7 @@ export function AgenticQueryInterface({
       case 'retrieval':
         return <MagnifyingGlass {...iconProps} weight="duotone" className="text-muted-foreground flex-shrink-0" />
       case 'generation':
-        return <Sparkle {...iconProps} weight="duotone" className="text-muted-foreground flex-shrink-0" />
+        return <Cloud {...iconProps} weight="duotone" className="text-muted-foreground flex-shrink-0" />
       case 'evaluation':
         return <CheckCircle {...iconProps} weight="duotone" className="text-muted-foreground flex-shrink-0" />
       case 'criticism':
@@ -317,7 +360,7 @@ export function AgenticQueryInterface({
                 {[
                   { phase: 'routing', label: 'Routing', icon: TreeStructure },
                   { phase: 'retrieval', label: 'Retrieval', icon: MagnifyingGlass },
-                  { phase: 'generation', label: 'Generation', icon: Sparkle },
+                  { phase: 'generation', label: 'Generation', icon: Cloud },
                   { phase: 'evaluation', label: 'Evaluation', icon: CheckCircle },
                   { phase: 'complete', label: 'Complete', icon: Check }
                 ].map(({ phase, label, icon: Icon }) => {
@@ -421,7 +464,7 @@ export function AgenticQueryInterface({
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-3 sm:mb-4">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
-                    <Sparkle size={14} className="sm:w-4 sm:h-4 text-accent" weight="duotone" />
+                    <Cloud size={14} className="sm:w-4 sm:h-4 text-accent" weight="duotone" />
                   </div>
                   <h3 className="font-semibold text-sm sm:text-base">Agentic Response</h3>
                 </div>

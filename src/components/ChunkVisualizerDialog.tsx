@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Document as DocType } from '@/lib/types'
 import { Chunk, CHUNKING_STRATEGIES, chunkAndEmbed, reduceDimensionsFor2D, cosineSimilarity } from '@/lib/chunking'
-import { Sparkle, ChartScatter, ListNumbers } from '@phosphor-icons/react'
+import { Brain, ChartScatter, ListNumbers } from '@phosphor-icons/react'
 
 interface ChunkVisualizerDialogProps {
   document: DocType | null
@@ -71,7 +71,7 @@ export function ChunkVisualizerDialog({ document, open, onOpenChange }: ChunkVis
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkle size={24} weight="duotone" className="text-primary" />
+            <Brain size={24} weight="duotone" className="text-primary" />
             Document Chunking & Embeddings
           </DialogTitle>
         </DialogHeader>

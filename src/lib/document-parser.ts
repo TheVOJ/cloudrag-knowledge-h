@@ -11,7 +11,7 @@ export interface ParsedDocument {
     size: number
     lastModified?: number
     author?: string
-    fileType: 'pdf' | 'docx'
+    fileType: 'pdf' | 'docx' | 'markdown'
     thumbnail?: string
   }
 }
@@ -30,9 +30,10 @@ async function generatePDFThumbnail(pdf: pdfjsLib.PDFDocumentProxy): Promise<str
     
     const renderContext = {
       canvasContext: context,
-      viewport: viewport
+      viewport: viewport,
+      canvas: canvas
     }
-    
+
     await page.render(renderContext).promise
     
     return canvas.toDataURL('image/jpeg', 0.7)
@@ -83,7 +84,7 @@ export async function parsePDF(file: File): Promise<ParsedDocument> {
 export async function parseWord(file: File): Promise<ParsedDocument> {
   const arrayBuffer = await file.arrayBuffer()
   const result = await mammoth.extractRawText({ arrayBuffer })
-  
+
   return {
     title: file.name.replace(/\.docx?$/i, ''),
     content: result.value,
@@ -95,23 +96,39 @@ export async function parseWord(file: File): Promise<ParsedDocument> {
   }
 }
 
+export async function parseMarkdown(file: File): Promise<ParsedDocument> {
+  const text = await file.text()
+
+  return {
+    title: file.name.replace(/\.md$/i, ''),
+    content: text,
+    metadata: {
+      size: file.size,
+      lastModified: file.lastModified,
+      fileType: 'markdown'
+    }
+  }
+}
+
 export async function parseDocument(file: File): Promise<ParsedDocument> {
   const extension = file.name.split('.').pop()?.toLowerCase()
-  
+
   if (extension === 'pdf') {
     return parsePDF(file)
   } else if (extension === 'docx' || extension === 'doc') {
     return parseWord(file)
+  } else if (extension === 'md') {
+    return parseMarkdown(file)
   } else {
-    throw new Error(`Unsupported file type: ${extension}. Only PDF and Word documents are supported.`)
+    throw new Error(`Unsupported file type: ${extension}. Only PDF, Word, and Markdown documents are supported.`)
   }
 }
 
 export function getSupportedFileTypes(): string {
-  return '.pdf,.doc,.docx'
+  return '.pdf,.doc,.docx,.md'
 }
 
 export function isSupportedFileType(filename: string): boolean {
   const extension = filename.split('.').pop()?.toLowerCase()
-  return extension === 'pdf' || extension === 'doc' || extension === 'docx'
+  return extension === 'pdf' || extension === 'doc' || extension === 'docx' || extension === 'md'
 }

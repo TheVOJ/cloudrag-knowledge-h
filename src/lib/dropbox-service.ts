@@ -192,7 +192,7 @@ export async function convertDropboxToDocuments(
   accessToken: string,
   path: string,
   sourceUrl: string
-): Promise<Omit<Document, 'id' | 'addedAt'>[]> {
+): Promise<Omit<Document, 'id' | 'addedAt' | 'knowledgeBaseId'>[]> {
   if (!accessToken || accessToken.trim() === '') {
     return await simulateDropboxFetch(path)
   }
@@ -200,7 +200,7 @@ export async function convertDropboxToDocuments(
   const service = new DropboxService({ accessToken })
   const result = await fetchDropboxContent(accessToken, path)
   
-  const documents: Omit<Document, 'id' | 'addedAt'>[] = []
+  const documents: Omit<Document, 'id' | 'addedAt' | 'knowledgeBaseId'>[] = []
   
   for (const file of result.files) {
     try {
@@ -240,7 +240,7 @@ export function parseDropboxUrl(url: string): { type: 'share' | 'path', value: s
   return { type: 'path', value: url.startsWith('/') ? url : `/${url}` }
 }
 
-export async function simulateDropboxFetch(pathOrUrl: string): Promise<Omit<Document, 'id' | 'addedAt'>[]> {
+export async function simulateDropboxFetch(pathOrUrl: string): Promise<Omit<Document, 'id' | 'addedAt' | 'knowledgeBaseId'>[]> {
   await new Promise(resolve => setTimeout(resolve, 1500))
   
   const mockFiles = [

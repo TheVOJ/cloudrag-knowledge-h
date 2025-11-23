@@ -17,7 +17,7 @@ import {
   CloudArrowDown,
   ChartBar,
   Eye,
-  Sparkle
+  Cloud
 } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AgenticRAGResponse } from '@/lib/agentic-rag-orchestrator'
@@ -75,7 +75,7 @@ export function AgenticFlowDiagram({ response, compact = false }: AgenticFlowDia
       steps.push({
         id: 'direct',
         label: 'Direct Answer',
-        icon: <Sparkle size={20} weight="duotone" />,
+        icon: <Cloud size={20} weight="duotone" />,
         status: 'completed',
         detail: 'Answer generated without retrieval'
       })
@@ -112,13 +112,13 @@ export function AgenticFlowDiagram({ response, compact = false }: AgenticFlowDia
         })
       }
 
-      const usedAzure = response.metadata.retrievalMethod === 'azure'
+      const usedAzure = response.metadata.retrievalBackend === 'azure'
       steps.push({
         id: 'retrieval',
         label: usedAzure ? 'Azure AI Search' : 'Local Retrieval',
         icon: usedAzure ? <Lightning size={20} weight="fill" /> : <Database size={20} weight="duotone" />,
         status: 'completed',
-        detail: `Retrieved ${response.retrieval.documents.length} documents`,
+        detail: `Retrieved ${response.retrieval.documents.length} documents using ${usedAzure ? 'Azure AI Search' : 'local search'}`,
         branches: response.routing.parallelizable ? [
           { condition: 'parallel execution', taken: true, destination: 'rerank' }
         ] : undefined
@@ -135,7 +135,7 @@ export function AgenticFlowDiagram({ response, compact = false }: AgenticFlowDia
       steps.push({
         id: 'generation',
         label: 'Answer Generation',
-        icon: <Sparkle size={20} weight="duotone" />,
+        icon: <Cloud size={20} weight="duotone" />,
         status: 'completed',
         detail: 'Synthesizing response from context'
       })

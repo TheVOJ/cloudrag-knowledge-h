@@ -1,4 +1,4 @@
-import { Document } from './types'
+import { Document, DocumentChunk } from './types'
 
 export interface AzureSearchConfig {
   endpoint: string
@@ -15,6 +15,18 @@ export interface SearchDocument {
   addedAt: number
   chunks: string[]
   embeddings?: number[][]
+}
+
+export interface ChunkSearchDocument {
+  id: string
+  documentId: string
+  title: string
+  content: string
+  chunkIndex: number
+  sourceType: string
+  sourceUrl: string
+  addedAt: number
+  embedding?: number[]
 }
 
 export interface SearchResult {
@@ -109,7 +121,13 @@ export class AzureSearchService {
     }
   }
 
-  async indexDocuments(documents: Document[]) {
+  async indexDocuments(documents: Document[], chunks?: DocumentChunk[]) {
+    // If chunks provided, index at chunk level for better retrieval
+    if (chunks && chunks.length > 0) {
+      return await this.indexChunks(chunks)
+    }
+
+    // Otherwise, index documents with simple chunking (backward compatibility)
     const searchDocs = documents.map((doc) => ({
       '@search.action': 'mergeOrUpload',
       id: doc.id,
@@ -118,7 +136,28 @@ export class AzureSearchService {
       sourceType: doc.sourceType,
       sourceUrl: doc.sourceUrl,
       addedAt: doc.addedAt,
-      chunks: this.chunkDocument(doc.content),
+      chunks: this.simpleChunkDocument(doc.content),
+    }))
+
+    return await this.makeRequest(
+      `/indexes/${this.config.indexName}/docs/index`,
+      'POST',
+      { value: searchDocs }
+    )
+  }
+
+  async indexChunks(chunks: DocumentChunk[]) {
+    const searchDocs = chunks.map((chunk) => ({
+      '@search.action': 'mergeOrUpload',
+      id: chunk.id,
+      documentId: chunk.documentId,
+      title: chunk.metadata.parentDocument.title,
+      content: chunk.text,
+      chunkIndex: chunk.chunkIndex,
+      sourceType: chunk.metadata.parentDocument.sourceType,
+      sourceUrl: chunk.metadata.parentDocument.sourceUrl,
+      addedAt: chunk.createdAt,
+      embedding: chunk.embedding,
     }))
 
     return await this.makeRequest(
@@ -188,7 +227,8 @@ export class AzureSearchService {
     return response
   }
 
-  private chunkDocument(content: string, chunkSize: number = 1000): string[] {
+  // Simple chunking for backward compatibility (when chunks not provided)
+  private simpleChunkDocument(content: string, chunkSize: number = 1000): string[] {
     const chunks: string[] = []
     const paragraphs = content.split(/\n\n+/)
 
@@ -208,6 +248,74 @@ export class AzureSearchService {
     }
 
     return chunks
+  }
+
+  async updateDocument(document: Document, chunks?: DocumentChunk[]) {
+    // Delete old version
+    await this.deleteDocuments([document.id])
+
+    // Delete old chunks if they exist
+    if (chunks && chunks.length > 0) {
+      const oldChunkIds = chunks.map(c => c.id)
+      await this.deleteDocuments(oldChunkIds)
+    }
+
+    // Index new version
+    return await this.indexDocuments([document], chunks)
+  }
+
+  async syncCheck(): Promise<{
+    localCount: number
+    azureCount: number
+    inSync: boolean
+    missingInAzure: string[]
+    extraInAzure: string[]
+  }> {
+    const azureCount = await this.getDocumentCount()
+
+    // Get all document IDs from Azure
+    const azureDocsResponse = await this.makeRequest(
+      `/indexes/${this.config.indexName}/docs/search`,
+      'POST',
+      {
+        search: '*',
+        select: 'id',
+        top: 10000
+      }
+    )
+
+    const azureIds = new Set(azureDocsResponse.value.map((d: any) => d.id))
+
+    return {
+      localCount: 0, // To be filled by caller
+      azureCount,
+      inSync: false, // To be determined by caller
+      missingInAzure: [], // To be filled by caller
+      extraInAzure: Array.from(azureIds)
+    }
+  }
+
+  async reconcile(
+    documentsToAdd: Document[],
+    documentIdsToDelete: string[],
+    chunks?: DocumentChunk[]
+  ): Promise<{ added: number; deleted: number }> {
+    let added = 0
+    let deleted = 0
+
+    // Add missing documents
+    if (documentsToAdd.length > 0) {
+      await this.indexDocuments(documentsToAdd, chunks)
+      added = documentsToAdd.length
+    }
+
+    // Remove extra documents
+    if (documentIdsToDelete.length > 0) {
+      await this.deleteDocuments(documentIdsToDelete)
+      deleted = documentIdsToDelete.length
+    }
+
+    return { added, deleted }
   }
 
   async testConnection(): Promise<boolean> {

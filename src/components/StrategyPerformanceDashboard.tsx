@@ -18,7 +18,7 @@ import {
   Warning,
   Info,
   ArrowsClockwise,
-  Sparkle,
+  Cloud,
   ListChecks,
   ChartBar
 } from '@phosphor-icons/react'
@@ -103,7 +103,7 @@ export function StrategyPerformanceDashboard() {
   const getImpactIcon = (impact: 'high' | 'medium' | 'low') => {
     switch (impact) {
       case 'high':
-        return <Sparkle size={16} weight="fill" className="text-accent" />
+        return <Cloud size={16} weight="fill" className="text-accent" />
       case 'medium':
         return <Info size={16} weight="fill" className="text-blue-500" />
       case 'low':

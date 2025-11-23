@@ -1,5 +1,6 @@
 import { QueryIntent, RetrievalStrategy, RoutingDecision } from './agentic-router'
 import { AgenticRAGResponse } from './agentic-rag-orchestrator'
+import { runtime } from './runtime/manager'
 
 export type StrategyPerformanceMetrics = {
   strategyId: string
@@ -100,7 +101,7 @@ export class StrategyPerformanceTracker {
       history.shift()
     }
     
-    await window.spark.kv.set(
+    await runtime.kv.set(
       StrategyPerformanceTracker.QUERY_HISTORY_KEY,
       history
     )
@@ -117,7 +118,7 @@ export class StrategyPerformanceTracker {
     
     if (record) {
       record.userFeedback = feedback
-      await window.spark.kv.set(
+      await runtime.kv.set(
         StrategyPerformanceTracker.QUERY_HISTORY_KEY,
         history
       )
@@ -177,7 +178,7 @@ export class StrategyPerformanceTracker {
     
     metric.improvementTrend = metric.successRate - prevSuccessRate
     
-    await window.spark.kv.set(
+    await runtime.kv.set(
       StrategyPerformanceTracker.STORAGE_KEY,
       metrics
     )
@@ -478,7 +479,7 @@ export class StrategyPerformanceTracker {
       }
     }
     
-    await window.spark.kv.set(StrategyPerformanceTracker.INSIGHTS_KEY, insights)
+    await runtime.kv.set(StrategyPerformanceTracker.INSIGHTS_KEY, insights)
   }
   
   private suggestAlternativeStrategy(intent: QueryIntent): RetrievalStrategy {
@@ -512,21 +513,21 @@ export class StrategyPerformanceTracker {
   }
   
   async getAllMetrics(): Promise<StrategyPerformanceMetrics[]> {
-    const metrics = await window.spark.kv.get<StrategyPerformanceMetrics[]>(
+    const metrics = await runtime.kv.get<StrategyPerformanceMetrics[]>(
       StrategyPerformanceTracker.STORAGE_KEY
     )
     return metrics || []
   }
   
   async getQueryHistory(): Promise<QueryPerformanceRecord[]> {
-    const history = await window.spark.kv.get<QueryPerformanceRecord[]>(
+    const history = await runtime.kv.get<QueryPerformanceRecord[]>(
       StrategyPerformanceTracker.QUERY_HISTORY_KEY
     )
     return history || []
   }
   
   async getInsights(): Promise<LearningInsight[]> {
-    const insights = await window.spark.kv.get<LearningInsight[]>(
+    const insights = await runtime.kv.get<LearningInsight[]>(
       StrategyPerformanceTracker.INSIGHTS_KEY
     )
     return insights || []
@@ -543,9 +544,9 @@ export class StrategyPerformanceTracker {
   }
   
   async clearAllData(): Promise<void> {
-    await window.spark.kv.delete(StrategyPerformanceTracker.STORAGE_KEY)
-    await window.spark.kv.delete(StrategyPerformanceTracker.QUERY_HISTORY_KEY)
-    await window.spark.kv.delete(StrategyPerformanceTracker.INSIGHTS_KEY)
+    await runtime.kv.delete(StrategyPerformanceTracker.STORAGE_KEY)
+    await runtime.kv.delete(StrategyPerformanceTracker.QUERY_HISTORY_KEY)
+    await runtime.kv.delete(StrategyPerformanceTracker.INSIGHTS_KEY)
   }
   
   private generateId(): string {

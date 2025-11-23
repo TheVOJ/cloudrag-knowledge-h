@@ -1,6 +1,9 @@
-import { Document } from './types'
+import { Document, DocumentChunk } from './types'
 import { RetrievalStrategy } from './agentic-router'
 import { AzureSearchService, SearchResult } from './azure-search'
+import { ChunkManager } from './chunk-manager'
+import { generateEmbedding } from './chunking'
+import { runtime } from './runtime/manager'
 
 export type RetrievalResult = {
   documents: Document[]
@@ -11,6 +14,9 @@ export type RetrievalResult = {
     azureResults?: SearchResult[]
     subQueryResults?: Map<string, RetrievalResult>
     ragFusionVariations?: string[]
+    chunkBased?: boolean
+    totalChunks?: number
+    uniqueDocuments?: number
   }
 }
 
@@ -29,11 +35,14 @@ export type RetrievalResult = {
  */
 export class RetrievalExecutor {
   private azureService?: AzureSearchService
+  private chunkManager: ChunkManager
+  private knowledgeBaseId?: string
 
   constructor(
     azureEndpoint?: string,
     azureApiKey?: string,
-    azureIndexName?: string
+    azureIndexName?: string,
+    knowledgeBaseId?: string
   ) {
     if (azureEndpoint && azureApiKey && azureIndexName) {
       this.azureService = new AzureSearchService({
@@ -42,6 +51,8 @@ export class RetrievalExecutor {
         indexName: azureIndexName,
       })
     }
+    this.chunkManager = new ChunkManager()
+    this.knowledgeBaseId = knowledgeBaseId
   }
 
   async executeRetrieval(
@@ -85,6 +96,11 @@ export class RetrievalExecutor {
     documents: Document[],
     topK: number
   ): Promise<RetrievalResult> {
+    // Use chunk-based retrieval if knowledge base ID is available
+    if (this.knowledgeBaseId) {
+      return this.chunkBasedRetrieval(query, documents, 'semantic', topK)
+    }
+
     if (this.azureService) {
       try {
         const results = await this.azureService.search(query, topK)
@@ -94,9 +110,15 @@ export class RetrievalExecutor {
           .map(r => docMap.get(r.id))
           .filter((d): d is Document => d !== undefined)
 
+        // Log warning if Azure returned results that couldn't be mapped to local documents
+        const unmappedCount = results.length - retrievedDocs.length
+        if (unmappedCount > 0) {
+          console.warn(`Azure returned ${unmappedCount} document(s) that couldn't be found in local documents. This may indicate a sync issue.`)
+        }
+
         return {
           documents: retrievedDocs,
-          scores: results.map(r => r.score),
+          scores: results.slice(0, retrievedDocs.length).map(r => r.score),
           method: 'semantic',
           queryUsed: query,
           metadata: { azureResults: results }
@@ -107,6 +129,76 @@ export class RetrievalExecutor {
     }
 
     return this.simulatedSemanticSearch(query, documents, topK)
+  }
+
+  private async chunkBasedRetrieval(
+    query: string,
+    documents: Document[],
+    strategy: RetrievalStrategy,
+    topK: number
+  ): Promise<RetrievalResult> {
+    // Generate query embedding for semantic search
+    const queryEmbedding = strategy === 'semantic' ? await generateEmbedding(query) : null
+
+    // Search chunks based on strategy
+    const chunkResults = queryEmbedding
+      ? await this.chunkManager.searchChunksWithEmbedding(queryEmbedding, this.knowledgeBaseId!, topK * 3)
+      : await this.chunkManager.searchChunks(query, this.knowledgeBaseId!, topK * 3)
+
+    // Map chunks back to documents with context
+    const documentMap = new Map<string, {
+      doc: Document
+      chunks: Array<{ chunk: DocumentChunk; score: number }>
+      maxScore: number
+    }>()
+
+    for (const result of chunkResults) {
+      const doc = documents.find(d => d.id === result.chunk.documentId)
+      if (!doc) continue
+
+      if (!documentMap.has(doc.id)) {
+        documentMap.set(doc.id, {
+          doc,
+          chunks: [],
+          maxScore: 0
+        })
+      }
+
+      const entry = documentMap.get(doc.id)!
+      entry.chunks.push(result)
+      entry.maxScore = Math.max(entry.maxScore, result.score)
+    }
+
+    // Sort by max chunk score and take topK documents
+    const sortedDocs = Array.from(documentMap.values())
+      .sort((a, b) => b.maxScore - a.maxScore)
+      .slice(0, topK)
+
+    // Create enhanced documents with chunk context
+    const retrievedDocs = sortedDocs.map(entry => {
+      // Combine top 3 chunks for this document
+      const topChunks = entry.chunks
+        .slice(0, 3)
+        .map(c => c.chunk.text)
+        .join('\n\n---\n\n')
+
+      return {
+        ...entry.doc,
+        content: topChunks // Use chunk content instead of full document
+      }
+    })
+
+    return {
+      documents: retrievedDocs,
+      scores: sortedDocs.map(e => e.maxScore),
+      method: strategy,
+      queryUsed: query,
+      metadata: {
+        chunkBased: true,
+        totalChunks: chunkResults.length,
+        uniqueDocuments: documentMap.size
+      }
+    }
   }
 
   private async simulatedSemanticSearch(
@@ -160,9 +252,15 @@ export class RetrievalExecutor {
           .map(r => docMap.get(r.id))
           .filter((d): d is Document => d !== undefined)
 
+        // Log warning if Azure returned results that couldn't be mapped to local documents
+        const unmappedCount = results.length - retrievedDocs.length
+        if (unmappedCount > 0) {
+          console.warn(`Azure returned ${unmappedCount} document(s) that couldn't be found in local documents. This may indicate a sync issue.`)
+        }
+
         return {
           documents: retrievedDocs,
-          scores: results.map(r => r.score),
+          scores: results.slice(0, retrievedDocs.length).map(r => r.score),
           method: 'keyword',
           queryUsed: query,
           metadata: { azureResults: results }
@@ -335,7 +433,7 @@ Provide JSON array: ["variation 1", "variation 2", "variation 3"]
 Respond with ONLY valid JSON array.`
 
     try {
-      const result = await window.spark.llm(prompt, 'gpt-4o-mini', true)
+      const result = await runtime.llm.generate(prompt, 'gpt-4o-mini', true)
       const parsed = JSON.parse(result)
       return Array.isArray(parsed) ? [query, ...parsed] : [query]
     } catch {

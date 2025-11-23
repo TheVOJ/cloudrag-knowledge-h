@@ -1,5 +1,6 @@
 import { Document } from './types'
 import { RetrievalResult } from './retrieval-executor'
+import { runtime } from './runtime/manager'
 
 export type ReflectionToken = 'RELEVANT' | 'PARTIALLY_RELEVANT' | 'NOT_RELEVANT'
 export type SupportToken = 'FULLY_SUPPORTED' | 'PARTIALLY_SUPPORTED' | 'NOT_SUPPORTED'
@@ -92,7 +93,7 @@ Provide JSON: {"token": "...", "confidence": 0.0-1.0, "reasoning": "brief explan
 Respond with ONLY valid JSON.`
 
     try {
-      const result = await window.spark.llm(prompt, 'gpt-4o', true)
+      const result = await runtime.llm.generate(prompt, 'gpt-4o', true)
       const evaluation = JSON.parse(result)
       
       return {
@@ -128,7 +129,7 @@ Provide JSON: {"token": "...", "confidence": 0.0-1.0, "reasoning": "brief explan
 Respond with ONLY valid JSON.`
 
     try {
-      const result = await window.spark.llm(prompt, 'gpt-4o-mini', true)
+      const result = await runtime.llm.generate(prompt, 'gpt-4o-mini', true)
       const evaluation = JSON.parse(result)
       
       return {
@@ -225,7 +226,7 @@ Provide JSON:
 Respond with ONLY valid JSON.`
 
     try {
-      const result = await window.spark.llm(prompt, 'gpt-4o', true)
+      const result = await runtime.llm.generate(prompt, 'gpt-4o', true)
       const feedback = JSON.parse(result)
       
       return {

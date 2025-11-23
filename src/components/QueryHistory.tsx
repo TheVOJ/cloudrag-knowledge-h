@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { ChatCircle, Sparkle, ChartBar, TrendUp, Clock, Lightning, MagnifyingGlass } from '@phosphor-icons/react'
+import { ChatCircle, Brain, ChartBar, TrendUp, Clock, Lightning, MagnifyingGlass } from '@phosphor-icons/react'
 
 interface QueryHistoryProps {
   queries: Query[]
@@ -213,7 +213,7 @@ export function QueryHistory({ queries, knowledgeBases }: QueryHistoryProps) {
                           {query.searchMethod === 'azure' ? (
                             <Lightning size={12} weight="fill" className="mr-1" />
                           ) : (
-                            <Sparkle size={12} weight="fill" className="mr-1" />
+                            <Brain size={12} weight="fill" className="mr-1" />
                           )}
                           {query.searchMethod === 'azure' ? 'Azure' : 'Simulated'}
                         </Badge>
@@ -267,7 +267,7 @@ export function QueryHistory({ queries, knowledgeBases }: QueryHistoryProps) {
             <Card className="p-4">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center">
-                  <Sparkle size={20} className="text-secondary-foreground" weight="duotone" />
+                  <Brain size={20} className="text-secondary-foreground" weight="duotone" />
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Avg Sources</p>

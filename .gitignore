@@ -25,10 +25,14 @@ dist-ssr
 *.sw?
 
 .env
+.env.save
 **/agent-eval-report*
 packages
 pids
 .file-manifest
 .devcontainer/
 
-.spark-workbench-id
+# Cloudflare Workers
+.wrangler
+.dev.vars*
+worker-configuration.d.ts

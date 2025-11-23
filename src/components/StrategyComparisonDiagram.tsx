@@ -6,7 +6,7 @@ import {
   Lightning,
   TreeStructure,
   ArrowsClockwise,
-  Sparkle,
+  Cloud,
   GitBranch,
   TextAa,
   Brain
@@ -148,10 +148,10 @@ export function StrategyComparisonDiagram() {
       complexity: 'high',
       bestFor: ['Research queries', 'Multi-perspective', 'Deep analysis'],
       nodes: [
-        { 
-          id: 'generate', 
-          label: 'Generate Queries', 
-          icon: <Sparkle size={16} weight="duotone" />,
+        {
+          id: 'generate',
+          label: 'Generate Queries',
+          icon: <Cloud size={16} weight="duotone" />,
           description: 'LLM-generated variants'
         },
         { 

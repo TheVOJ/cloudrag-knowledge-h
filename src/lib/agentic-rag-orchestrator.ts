@@ -3,6 +3,7 @@ import { AgenticQueryRouter, RoutingDecision, QueryIntent } from './agentic-rout
 import { RetrievalExecutor, RetrievalResult } from './retrieval-executor'
 import { SelfReflectiveRAG, SelfEvaluation, CriticFeedback } from './self-reflective-rag'
 import { StrategyPerformanceTracker } from './strategy-performance-tracker'
+import { runtime } from './runtime/manager'
 
 export type QueryReformulation = {
   id: string
@@ -39,6 +40,7 @@ export type AgenticRAGResponse = {
   metadata: {
     totalTimeMs: number
     retrievalMethod: string
+    retrievalBackend: 'azure' | 'local'
     confidence: number
     needsImprovement: boolean
     improvementSuggestions?: string[]
@@ -77,16 +79,27 @@ export class AgenticRAGOrchestrator {
     private documents: Document[],
     private knowledgeBaseName: string,
     azureSettings?: AzureSearchSettings,
-    azureIndexName?: string
+    azureIndexName?: string,
+    initialConversationHistory?: Array<{ query: string; response: string }> // NEW
   ) {
     this.router = new AgenticQueryRouter()
+
+    // Extract knowledgeBaseId from documents for chunk-based retrieval
+    const knowledgeBaseId = documents.length > 0 ? documents[0].knowledgeBaseId : undefined
+
     this.executor = new RetrievalExecutor(
       azureSettings?.enabled ? azureSettings.endpoint : undefined,
       azureSettings?.enabled ? azureSettings.apiKey : undefined,
-      azureIndexName
+      azureIndexName,
+      knowledgeBaseId // NEW: Enable chunk-based retrieval
     )
     this.reflector = new SelfReflectiveRAG()
     this.tracker = new StrategyPerformanceTracker()
+
+    // Initialize with existing history
+    if (initialConversationHistory) {
+      this.conversationHistory = initialConversationHistory
+    }
   }
 
   private emitProgress(config: AgenticRAGConfig, step: Omit<ProgressStep, 'timestamp'>) {
@@ -607,7 +620,7 @@ export class AgenticRAGOrchestrator {
     }
 
     this.conversationHistory.push({ query: userQuery, response: answer })
-    if (this.conversationHistory.length > 5) {
+    if (this.conversationHistory.length > 20) { // Changed from 5 to 20
       this.conversationHistory.shift()
     }
 
@@ -627,6 +640,7 @@ export class AgenticRAGOrchestrator {
       metadata: {
         totalTimeMs,
         retrievalMethod: retrieval.method,
+        retrievalBackend: retrieval.metadata?.azureResults ? 'azure' : 'local',
         confidence: evaluation.confidence,
         needsImprovement: improvements.shouldRetry,
         improvementSuggestions: improvements.actions.length > 0 ? improvements.actions : undefined
@@ -644,7 +658,7 @@ export class AgenticRAGOrchestrator {
 
 Keep it brief and friendly.`
 
-      return await window.spark.llm(prompt, 'gpt-4o-mini')
+      return await runtime.llm.generate(prompt, 'gpt-4o-mini')
     }
 
     if (intent === 'out_of_scope') {
@@ -683,7 +697,7 @@ Instructions:
 
 Answer:`
 
-    return await window.spark.llm(prompt, 'gpt-4o')
+    return await runtime.llm.generate(prompt, 'gpt-4o')
   }
 
   private async reformulateQuery(
@@ -709,7 +723,7 @@ Generate a reformulated query that addresses these issues. Make it more specific
 Respond with ONLY the reformulated query, no explanation.`
 
     try {
-      const reformulated = await window.spark.llm(prompt, 'gpt-4o-mini')
+      const reformulated = await runtime.llm.generate(prompt, 'gpt-4o-mini')
       return reformulated.trim()
     } catch {
       return originalQuery

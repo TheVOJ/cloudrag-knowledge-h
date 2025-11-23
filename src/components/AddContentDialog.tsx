@@ -114,11 +114,11 @@ export function AddContentDialog({ open, onOpenChange, onAdd, onShowFileUpload }
           <TabsContent value="file" className="space-y-3 sm:space-y-4">
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                Upload PDF or Word documents directly from your computer. Multiple files are supported.
+                Upload PDF, Word, or Markdown documents directly from your computer. Multiple files are supported.
               </p>
               <Alert>
                 <AlertDescription className="text-xs">
-                  💡 Click the "Upload Files" button below to select PDF (.pdf) or Word (.doc, .docx) documents
+                  💡 Click the "Upload Files" button below to select PDF (.pdf), Word (.doc, .docx), or Markdown (.md) documents
                 </AlertDescription>
               </Alert>
             </div>

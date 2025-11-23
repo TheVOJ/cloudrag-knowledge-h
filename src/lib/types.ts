@@ -1,4 +1,4 @@
-export type SourceType = 'web' | 'github' | 'onedrive' | 'dropbox' | 'pdf' | 'docx'
+export type SourceType = 'web' | 'github' | 'onedrive' | 'dropbox' | 'pdf' | 'docx' | 'markdown'
 
 export interface Document {
   id: string
@@ -7,6 +7,7 @@ export interface Document {
   sourceType: SourceType
   sourceUrl: string
   addedAt: number
+  knowledgeBaseId: string
   metadata: {
     size?: number
     lastModified?: number
@@ -14,6 +15,29 @@ export interface Document {
     thumbnail?: string
     pageCount?: number
   }
+  chunkCount?: number
+  chunkStrategy?: 'fixed' | 'sentence' | 'paragraph' | 'semantic'
+}
+
+export interface DocumentChunk {
+  id: string
+  documentId: string
+  knowledgeBaseId: string
+  chunkIndex: number
+  text: string
+  startIndex: number
+  endIndex: number
+  tokens: number
+  embedding?: number[]
+  metadata: {
+    strategy: 'fixed' | 'sentence' | 'paragraph' | 'semantic'
+    parentDocument: {
+      title: string
+      sourceType: SourceType
+      sourceUrl: string
+    }
+  }
+  createdAt: number
 }
 
 export interface KnowledgeBase {
@@ -35,7 +59,7 @@ export interface Query {
   response: string
   sources: string[]
   timestamp: number
-  searchMethod?: 'simulated' | 'azure'
+  searchMethod?: 'simulated' | 'azure' | 'agentic'
 }
 
 export interface AzureSearchSettings {

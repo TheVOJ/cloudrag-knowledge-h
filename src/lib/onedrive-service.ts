@@ -165,7 +165,7 @@ export async function convertOneDriveToDocuments(
   accessToken: string,
   pathOrId: string,
   sourceUrl: string
-): Promise<Omit<Document, 'id' | 'addedAt'>[]> {
+): Promise<Omit<Document, 'id' | 'addedAt' | 'knowledgeBaseId'>[]> {
   if (!accessToken || accessToken.trim() === '') {
     return await simulateOneDriveFetch(pathOrId)
   }
@@ -173,7 +173,7 @@ export async function convertOneDriveToDocuments(
   const service = new OneDriveService({ accessToken })
   const result = await fetchOneDriveContent(accessToken, pathOrId)
   
-  const documents: Omit<Document, 'id' | 'addedAt'>[] = []
+  const documents: Omit<Document, 'id' | 'addedAt' | 'knowledgeBaseId'>[] = []
   
   for (const item of result.items) {
     if (item.file) {
@@ -216,7 +216,7 @@ export function parseOneDriveUrl(url: string): { type: 'share' | 'path' | 'id', 
   return { type: 'id', value: url }
 }
 
-export async function simulateOneDriveFetch(pathOrUrl: string): Promise<Omit<Document, 'id' | 'addedAt'>[]> {
+export async function simulateOneDriveFetch(pathOrUrl: string): Promise<Omit<Document, 'id' | 'addedAt' | 'knowledgeBaseId'>[]> {
   await new Promise(resolve => setTimeout(resolve, 1500))
   
   const mockFiles = [

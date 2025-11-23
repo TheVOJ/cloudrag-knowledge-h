@@ -1,4 +1,5 @@
 import { Document } from './types'
+import { runtime } from './runtime/manager'
 
 export type QueryIntent = 
   | 'factual'
@@ -53,7 +54,7 @@ Query: "${query}"
 
 Respond with ONLY the category name (lowercase, no explanation).`
 
-    const result = await window.spark.llm(prompt, 'gpt-4o-mini')
+    const result = await runtime.llm.generate(prompt, 'gpt-4o-mini')
     const intent = result.trim().toLowerCase()
     
     const validIntents: QueryIntent[] = ['factual', 'analytical', 'comparative', 'procedural', 'clarification', 'chitchat', 'out_of_scope']
@@ -73,7 +74,7 @@ Query: "${query}"
 Respond with ONLY valid JSON, no markdown formatting.`
 
     try {
-      const result = await window.spark.llm(prompt, 'gpt-4o-mini', true)
+      const result = await runtime.llm.generate(prompt, 'gpt-4o-mini', true)
       const analysis = JSON.parse(result)
       return analysis
     } catch {
@@ -157,7 +158,7 @@ Provide a routing plan as JSON with:
 Respond with ONLY valid JSON.`
 
     try {
-      const result = await window.spark.llm(routingPrompt, 'gpt-4o', true)
+      const result = await runtime.llm.generate(routingPrompt, 'gpt-4o', true)
       const decision = JSON.parse(result)
       
       return {
@@ -224,7 +225,7 @@ Example format: ["sub-query 1", "sub-query 2", "sub-query 3"]
 Respond with ONLY valid JSON array.`
 
     try {
-      const result = await window.spark.llm(prompt, 'gpt-4o-mini', true)
+      const result = await runtime.llm.generate(prompt, 'gpt-4o-mini', true)
       const parsed = JSON.parse(result)
       return Array.isArray(parsed) ? parsed : [originalQuery]
     } catch {
@@ -247,7 +248,7 @@ Provide JSON array: ["variation 1", "variation 2", "variation 3"]
 Respond with ONLY valid JSON array.`
 
     try {
-      const result = await window.spark.llm(prompt, 'gpt-4o-mini', true)
+      const result = await runtime.llm.generate(prompt, 'gpt-4o-mini', true)
       const parsed = JSON.parse(result)
       return Array.isArray(parsed) ? [query, ...parsed] : [query]
     } catch {
@@ -303,7 +304,7 @@ Make it specific and actionable.
 Respond with just the clarification question, no explanation.`
 
       try {
-        const question = await window.spark.llm(prompt, 'gpt-4o-mini')
+        const question = await runtime.llm.generate(prompt, 'gpt-4o-mini')
         return {
           needsClarification: true,
           clarificationQuestion: question.trim()

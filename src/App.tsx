@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useKV } from '@github/spark/hooks'
+import { useRuntimeKV } from '@/hooks/useRuntimeKV'
 import { KnowledgeBase, Document, Query, SourceType, AzureSearchSettings } from '@/lib/types'
 import { generateId, simulateDocumentExtraction } from '@/lib/helpers'
 import { AzureSearchService } from '@/lib/azure-search'
+import { ChunkManager } from '@/lib/chunk-manager'
 import { scrapeWebContent, convertToDocument as convertWebToDocument } from '@/lib/web-scraper'
 import { fetchRepoContent, convertRepoToDocuments } from '@/lib/github-service'
 import { simulateOneDriveFetch } from '@/lib/onedrive-service'
@@ -29,15 +30,15 @@ import { motion } from 'framer-motion'
 type View = 'dashboard' | 'details' | 'analytics' | 'performance'
 
 function App() {
-  const [knowledgeBases, setKnowledgeBases] = useKV<KnowledgeBase[]>('knowledge-bases', [])
-  const [documents, setDocuments] = useKV<Document[]>('documents', [])
-  const [queries, setQueries] = useKV<Query[]>('queries', [])
-  const [azureSettings, setAzureSettings] = useKV<AzureSearchSettings>('azure-settings', {
+  const [knowledgeBases, setKnowledgeBases] = useRuntimeKV<KnowledgeBase[]>('knowledge-bases', [])
+  const [documents, setDocuments] = useRuntimeKV<Document[]>('documents', [])
+  const [queries, setQueries] = useRuntimeKV<Query[]>('queries', [])
+  const [azureSettings, setAzureSettings] = useRuntimeKV<AzureSearchSettings>('azure-settings', {
     endpoint: '',
     apiKey: '',
     enabled: false,
   })
-  const [cloudStorageSettings, setCloudStorageSettings] = useKV<CloudStorageSettings>('cloud-storage-settings', {
+  const [cloudStorageSettings, setCloudStorageSettings] = useRuntimeKV<CloudStorageSettings>('cloud-storage-settings', {
     onedrive: { enabled: false, accessToken: '' },
     dropbox: { enabled: false, accessToken: '' }
   })
@@ -55,7 +56,8 @@ function App() {
   const [showChunkVisualizer, setShowChunkVisualizer] = useState(false)
   const [visualizerDocument, setVisualizerDocument] = useState<Document | null>(null)
   const [agenticMode, setAgenticMode] = useState(false)
-  
+  const [chunkManager] = useState(() => new ChunkManager())
+
   const kbs = knowledgeBases || []
   const docs = documents || []
   const qs = queries || []
@@ -95,7 +97,7 @@ function App() {
   const handleDeleteKB = (id: string) => {
     const kb = kbs.find(k => k.id === id)
     setKnowledgeBases((current) => (current || []).filter(k => k.id !== id))
-    setDocuments((current) => (current || []).filter(d => d.sourceUrl !== id))
+    setDocuments((current) => (current || []).filter(d => d.knowledgeBaseId !== id))
     toast.success(`Knowledge base "${kb?.name}" deleted`)
   }
   
@@ -146,11 +148,40 @@ function App() {
       const newDocs: Document[] = documentsToAdd.map(doc => ({
         ...doc,
         id: generateId(),
-        addedAt: Date.now()
+        addedAt: Date.now(),
+        knowledgeBaseId: selectedKB.id,
+        chunkStrategy: 'semantic' as const
       }))
-      
+
       setDocuments((current) => [...(current || []), ...newDocs])
-      
+
+      // Create chunks for precise retrieval
+      toast.info('Creating chunks for precise retrieval...')
+      let totalChunks = 0
+      const allChunks = []
+
+      for (const doc of newDocs) {
+        const chunks = await chunkManager.chunkDocument(
+          doc.id,
+          doc.knowledgeBaseId,
+          doc.title,
+          doc.content,
+          doc.sourceType,
+          doc.sourceUrl,
+          doc.chunkStrategy || 'semantic'
+        )
+
+        totalChunks += chunks.length
+        allChunks.push(...chunks)
+
+        // Update document with chunk count
+        setDocuments((current) =>
+          (current || []).map(d =>
+            d.id === doc.id ? { ...d, chunkCount: chunks.length } : d
+          )
+        )
+      }
+
       if (selectedKB.azureSearchEnabled && selectedKB.azureIndexName && azureSettings?.enabled) {
         try {
           const service = new AzureSearchService({
@@ -158,8 +189,8 @@ function App() {
             apiKey: azureSettings.apiKey,
             indexName: selectedKB.azureIndexName,
           })
-          await service.indexDocuments(newDocs)
-          toast.success(`${newDocs.length} document(s) indexed in Azure AI Search`)
+          await service.indexDocuments(newDocs, allChunks)
+          toast.success(`${newDocs.length} document(s) with ${totalChunks} chunks indexed in Azure AI Search`)
         } catch (error) {
           toast.error('Failed to index in Azure: ' + (error instanceof Error ? error.message : 'Unknown error'))
         }
@@ -195,7 +226,7 @@ function App() {
         }
       })
       
-      toast.success(`${newDocs.length} document(s) added successfully`)
+      toast.success(`${newDocs.length} document(s) added with ${totalChunks} chunks`)
     } catch (error) {
       toast.error('Failed to add content: ' + (error instanceof Error ? error.message : 'Unknown error'))
       throw error
@@ -212,14 +243,43 @@ function App() {
         id: generateId(),
         title: file.title,
         content: file.content,
-        sourceType: (file.metadata.fileType === 'pdf' ? 'pdf' : 'docx') as SourceType,
+        sourceType: (file.metadata.fileType === 'pdf' ? 'pdf' : file.metadata.fileType === 'markdown' ? 'markdown' : 'docx') as SourceType,
         sourceUrl: file.fileName,
         addedAt: Date.now(),
-        metadata: file.metadata
+        knowledgeBaseId: selectedKB.id,
+        metadata: file.metadata,
+        chunkStrategy: 'semantic' as const
       }))
-      
+
       setDocuments((current) => [...(current || []), ...newDocs])
-      
+
+      // Create chunks for precise retrieval
+      toast.info('Creating chunks for uploaded files...')
+      let totalChunks = 0
+      const allChunks = []
+
+      for (const doc of newDocs) {
+        const chunks = await chunkManager.chunkDocument(
+          doc.id,
+          doc.knowledgeBaseId,
+          doc.title,
+          doc.content,
+          doc.sourceType,
+          doc.sourceUrl,
+          doc.chunkStrategy || 'semantic'
+        )
+
+        totalChunks += chunks.length
+        allChunks.push(...chunks)
+
+        // Update document with chunk count
+        setDocuments((current) =>
+          (current || []).map(d =>
+            d.id === doc.id ? { ...d, chunkCount: chunks.length } : d
+          )
+        )
+      }
+
       if (selectedKB.azureSearchEnabled && selectedKB.azureIndexName && azureSettings?.enabled) {
         try {
           const service = new AzureSearchService({
@@ -227,8 +287,8 @@ function App() {
             apiKey: azureSettings.apiKey,
             indexName: selectedKB.azureIndexName,
           })
-          await service.indexDocuments(newDocs)
-          toast.success(`${newDocs.length} document(s) indexed in Azure AI Search`)
+          await service.indexDocuments(newDocs, allChunks)
+          toast.success(`${newDocs.length} document(s) with ${totalChunks} chunks indexed in Azure AI Search`)
         } catch (error) {
           toast.error('Failed to index in Azure: ' + (error instanceof Error ? error.message : 'Unknown error'))
         }
@@ -266,7 +326,7 @@ function App() {
         }
       })
       
-      toast.success(`${newDocs.length} document(s) uploaded successfully`)
+      toast.success(`${newDocs.length} document(s) uploaded with ${totalChunks} chunks`)
     } catch (error) {
       toast.error('Failed to upload files: ' + (error instanceof Error ? error.message : 'Unknown error'))
       throw error
@@ -339,7 +399,7 @@ function App() {
       response,
       sources,
       timestamp: Date.now(),
-      searchMethod: searchMethod === 'agentic' ? 'azure' : searchMethod,
+      searchMethod: searchMethod,
     }
     
     setQueries((current) => [...(current || []), newQuery])
@@ -380,10 +440,7 @@ function App() {
   }
   
   const getKBDocuments = (kbId: string) => {
-    return docs.filter(doc => {
-      const kb = kbs.find(k => k.id === kbId)
-      return kb && doc.addedAt >= kb.createdAt
-    }).slice(0, 50)
+    return docs.filter(doc => doc.knowledgeBaseId === kbId)
   }
   
   const renderDashboard = () => (
