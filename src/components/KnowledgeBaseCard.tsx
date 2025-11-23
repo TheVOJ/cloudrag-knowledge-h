@@ -12,6 +12,8 @@ interface KnowledgeBaseCardProps {
 }
 
 export function KnowledgeBaseCard({ knowledgeBase, onSelect, onDelete }: KnowledgeBaseCardProps) {
+  const sources = knowledgeBase.sources ?? []
+
   return (
     <Card 
       className="p-3 sm:p-4 hover:shadow-lg transition-all cursor-pointer border-2 hover:border-primary/50 active:scale-[0.98]"
@@ -56,9 +58,9 @@ export function KnowledgeBaseCard({ knowledgeBase, onSelect, onDelete }: Knowled
           <FileText size={14} className="sm:w-4 sm:h-4 flex-shrink-0" />
           <span className="truncate">{knowledgeBase.documentCount} doc{knowledgeBase.documentCount !== 1 ? 's' : ''}</span>
         </div>
-        
+
         <div className="flex gap-1 flex-shrink-0">
-          {knowledgeBase.sources.map((source) => (
+          {sources.map((source) => (
             <span key={source} className="text-base sm:text-lg" title={source}>
               {getSourceIcon(source)}
             </span>

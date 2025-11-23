@@ -21,7 +21,8 @@ import {
   Minus,
   Circle,
   CircleNotch,
-  Check
+  Check,
+  ChatsCircle
 } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Document, AzureSearchSettings } from '@/lib/types'
@@ -33,17 +34,29 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { AgenticFlowDiagram } from '@/components/AgenticFlowDiagram'
 import { QueryReformulationGraph, QueryReformulationData } from '@/components/QueryReformulationGraph'
 import { QuerySimilarityMatrix } from '@/components/QuerySimilarityMatrix'
+import { ConversationList } from '@/components/ConversationList'
 import { toast } from 'sonner'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { UnifiedQueryRecord } from '@/lib/unified-query-model'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface AgenticQueryInterfaceProps {
+  knowledgeBaseId: string
   knowledgeBaseName: string
   documents: Document[]
-  onQuery: (query: string, response: string, sources: string[], searchMethod: 'simulated' | 'azure' | 'agentic') => void
+  onQuery: (
+    query: string,
+    response: string,
+    sources: string[],
+    searchMethod: 'simulated' | 'azure' | 'agentic',
+    analyticsMetadata?: Partial<UnifiedQueryRecord>
+  ) => Promise<void> | void
   azureSettings?: AzureSearchSettings
   indexName?: string
 }
 
 export function AgenticQueryInterface({
+  knowledgeBaseId,
   knowledgeBaseName,
   documents,
   onQuery,
@@ -63,6 +76,34 @@ export function AgenticQueryInterface({
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null)
   const [conversationManager] = useState(() => new ConversationManager())
   const [orchestrator, setOrchestrator] = useState<AgenticRAGOrchestrator | null>(null)
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false)
+  const [conversationRefreshKey, setConversationRefreshKey] = useState(0)
+  const [isConversationSheetOpen, setIsConversationSheetOpen] = useState(false)
+  const [enableSemanticCache, setEnableSemanticCache] = useState(true)
+  const [cacheTtlMinutes, setCacheTtlMinutes] = useState(60)
+  const [cacheConfidence, setCacheConfidence] = useState(0.55)
+
+  const initializeConversation = async () => {
+    setIsLoadingConversations(true)
+    try {
+      const existing = await conversationManager.getConversationsByKB(knowledgeBaseId)
+      const sorted = existing.sort((a, b) => b.updatedAt - a.updatedAt)
+      const conversation = sorted[0] || await conversationManager.createConversation(knowledgeBaseId)
+      setCurrentConversation(conversation)
+
+      const history = conversationManager.getConversationHistory(conversation)
+      const newOrchestrator = new AgenticRAGOrchestrator(
+        documents,
+        knowledgeBaseName,
+        azureSettings,
+        indexName,
+        history
+      )
+      setOrchestrator(newOrchestrator)
+    } finally {
+      setIsLoadingConversations(false)
+    }
+  }
 
   const calculateSemanticSimilarity = (query1: string, query2: string): number => {
     const words1 = query1.toLowerCase().split(/\s+/).filter(w => w.length > 3)
@@ -88,27 +129,11 @@ export function AgenticQueryInterface({
     return Math.min(1, jaccardSimilarity * 0.7 + lengthSimilarity * 0.3 + positionBonus)
   }
 
-  // Initialize conversation on mount
+  // Initialize conversation on mount or when KB changes
   useEffect(() => {
-    const initConversation = async () => {
-      // Create new conversation for this knowledge base
-      const conversation = await conversationManager.createConversation(knowledgeBaseName)
-      setCurrentConversation(conversation)
-
-      // Create orchestrator with conversation history
-      const history = conversationManager.getConversationHistory(conversation)
-      const newOrchestrator = new AgenticRAGOrchestrator(
-        documents,
-        knowledgeBaseName,
-        azureSettings,
-        indexName,
-        history
-      )
-      setOrchestrator(newOrchestrator)
-    }
-
-    initConversation()
-  }, [knowledgeBaseName]) // Only reinitialize when knowledge base changes
+    initializeConversation()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [knowledgeBaseId])
 
   useEffect(() => {
     if (!response?.answer) {
@@ -156,6 +181,9 @@ export function AgenticQueryInterface({
         enableCriticism: true,
         enableAutoRetry: true,
         topK: 5,
+        enableSemanticCache,
+        cacheTtlMs: cacheTtlMinutes * 60 * 1000,
+        cacheConfidenceThreshold: cacheConfidence,
         onProgress: (step: ProgressStep) => {
           setProgressSteps(prev => [...prev, step])
           if (step.progress !== undefined) {
@@ -163,6 +191,20 @@ export function AgenticQueryInterface({
           }
         }
       })
+
+      // Mark all steps complete and add a terminal step
+      setProgressSteps(prev => {
+        const normalized = prev.map(step => step.status === 'in_progress' ? { ...step, status: 'complete' as const } : step)
+        normalized.push({
+          phase: 'complete',
+          status: 'complete',
+          message: 'Response delivered',
+          timestamp: Date.now(),
+          progress: 100
+        })
+        return normalized
+      })
+      setCurrentProgress(100)
 
       // Add assistant response to conversation
       const updatedConversation = await conversationManager.addMessage(
@@ -186,7 +228,17 @@ export function AgenticQueryInterface({
         setQueryId(latestQuery.id)
       }
 
-      onQuery(currentQuery, result.answer, result.sources, 'agentic')
+      onQuery(currentQuery, result.answer, result.sources, 'agentic', {
+        intent: result.routing.intent,
+        strategy: result.routing.strategy,
+        confidence: result.evaluation.confidence,
+        iterations: result.iterations,
+        timeMs: result.metadata.totalTimeMs,
+        needsImprovement: result.metadata.needsImprovement,
+        retrievalMethod: result.metadata.retrievalMethod,
+        documentsRetrieved: result.retrieval.documents.length,
+        retrievalBackend: result.metadata.retrievalBackend
+      })
     } catch (error) {
       console.error('Agentic RAG error:', error)
       setResponse({
@@ -223,6 +275,10 @@ export function AgenticQueryInterface({
           needsImprovement: true
         }
       })
+
+      // Ensure progress UI stops animating even on error
+      setProgressSteps(prev => prev.map(step => step.status === 'in_progress' ? { ...step, status: 'error' as const } : step))
+      setCurrentProgress(100)
     }
 
     setIsLoading(false)
@@ -242,6 +298,54 @@ export function AgenticQueryInterface({
     }
 
     toast.success(feedbackMessages[feedback])
+  }
+
+  const handleSelectConversation = async (conversationId: string) => {
+    const conversation = await conversationManager.getConversation(conversationId)
+    if (!conversation) return
+
+    setCurrentConversation(conversation)
+    setConversationRefreshKey((key) => key + 1)
+    const history = conversationManager.getConversationHistory(conversation)
+    const newOrchestrator = new AgenticRAGOrchestrator(
+      documents,
+      knowledgeBaseName,
+      azureSettings,
+      indexName,
+      history
+    )
+    setOrchestrator(newOrchestrator)
+    setResponse(null)
+    setDisplayedText('')
+    setProgressSteps([])
+    setCurrentProgress(0)
+  }
+
+  const handleNewConversation = async () => {
+    const conversation = await conversationManager.createConversation(knowledgeBaseId)
+    setCurrentConversation(conversation)
+    setConversationRefreshKey((key) => key + 1)
+    const newOrchestrator = new AgenticRAGOrchestrator(
+      documents,
+      knowledgeBaseName,
+      azureSettings,
+      indexName,
+      []
+    )
+    setOrchestrator(newOrchestrator)
+    setResponse(null)
+    setDisplayedText('')
+    setProgressSteps([])
+    setCurrentProgress(0)
+  }
+
+  const handleRenameConversation = async (conversationId: string, title: string) => {
+    await conversationManager.updateConversationTitle(conversationId, title)
+    setConversationRefreshKey((key) => key + 1)
+
+    setCurrentConversation((prev) =>
+      prev && prev.id === conversationId ? { ...prev, title } : prev
+    )
   }
 
   const getIntentIcon = (intent: string) => {
@@ -301,9 +405,90 @@ export function AgenticQueryInterface({
     }
   }
 
+  const safeProgressSteps = Array.isArray(progressSteps) ? progressSteps : []
+  const safeDocuments = (response?.retrieval?.documents && Array.isArray(response.retrieval.documents))
+    ? response.retrieval.documents
+    : []
+  const safeScores = (response?.retrieval?.scores && Array.isArray(response.retrieval.scores))
+    ? response.retrieval.scores
+    : []
+  const safeReformulations = (response?.reformulations && Array.isArray(response.reformulations))
+    ? response.reformulations
+    : []
+  const safeSources = (response?.sources && Array.isArray(response.sources)) ? response.sources : []
+  const safeSubQueries = (response?.routing?.subQueries && Array.isArray(response.routing.subQueries)) ? response.routing.subQueries : []
+  const safeFusionVariants = (response?.retrieval?.metadata?.ragFusionVariations && Array.isArray(response.retrieval.metadata.ragFusionVariations))
+    ? response.retrieval.metadata.ragFusionVariations
+    : []
+  const safeImprovements = (response?.metadata?.improvementSuggestions && Array.isArray(response.metadata.improvementSuggestions))
+    ? response.metadata.improvementSuggestions
+    : []
+
   return (
     <div className="space-y-3 sm:space-y-4">
-      <Card className="p-3 sm:p-4">
+      <Sheet open={isConversationSheetOpen} onOpenChange={setIsConversationSheetOpen}>
+        <SheetTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="md:hidden w-full justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <ChatsCircle size={16} weight="duotone" />
+              Conversations
+            </div>
+            <Badge variant="secondary" className="text-[10px]">
+              {currentConversation ? 'Active' : 'None'}
+            </Badge>
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-[92vw] sm:w-[380px]">
+          <SheetHeader>
+            <SheetTitle>Conversations</SheetTitle>
+          </SheetHeader>
+          <ConversationList
+            knowledgeBaseId={knowledgeBaseId}
+            currentConversationId={currentConversation?.id}
+            onSelectConversation={(id) => {
+              handleSelectConversation(id)
+              setIsConversationSheetOpen(false)
+            }}
+            onNewConversation={() => {
+              handleNewConversation()
+              setIsConversationSheetOpen(false)
+            }}
+            onRenameConversation={handleRenameConversation}
+            isLoading={isLoadingConversations}
+            refreshKey={conversationRefreshKey}
+          />
+        </SheetContent>
+      </Sheet>
+
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-[280px,1fr]">
+        <Card className="hidden md:block p-3 sm:p-4 h-full">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              Conversations
+            </div>
+            <Button size="sm" variant="outline" onClick={handleNewConversation} disabled={isLoadingConversations}>
+              New
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground mb-2">
+            Linked to "{knowledgeBaseName}" KB
+          </div>
+          <ConversationList
+            knowledgeBaseId={knowledgeBaseId}
+            currentConversationId={currentConversation?.id}
+            onSelectConversation={handleSelectConversation}
+            onNewConversation={handleNewConversation}
+            onRenameConversation={handleRenameConversation}
+            refreshKey={conversationRefreshKey}
+            isLoading={isLoadingConversations}
+          />
+        </Card>
+
+        <Card className="p-3 sm:p-4">
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <MagnifyingGlass
@@ -334,7 +519,88 @@ export function AgenticQueryInterface({
           <span className="hidden sm:inline">Agentic RAG: Intelligent routing, multi-strategy retrieval, self-evaluation & auto-correction</span>
           <span className="sm:hidden">Intelligent multi-strategy AI agent</span>
         </div>
+
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+          <label className="flex items-center gap-2 p-2 rounded border bg-muted/50">
+            <input
+              type="checkbox"
+              checked={enableSemanticCache}
+              onChange={(e) => setEnableSemanticCache(e.target.checked)}
+            />
+            <span className="font-medium">Semantic cache</span>
+          </label>
+          <label className="flex items-center gap-2 p-2 rounded border bg-muted/50">
+            <span className="text-muted-foreground">TTL (min)</span>
+            <input
+              type="number"
+              min={5}
+              max={720}
+              value={cacheTtlMinutes}
+              onChange={(e) => setCacheTtlMinutes(Number(e.target.value) || 60)}
+              className="w-20 h-8 text-xs border rounded px-2"
+            />
+          </label>
+          <label className="flex items-center gap-2 p-2 rounded border bg-muted/50">
+            <span className="text-muted-foreground">Cache if ≥</span>
+            <input
+              type="number"
+              step={0.05}
+              min={0}
+              max={1}
+              value={cacheConfidence}
+              onChange={(e) => setCacheConfidence(Number(e.target.value) || 0.55)}
+              className="w-20 h-8 text-xs border rounded px-2"
+            />
+            <span>conf</span>
+          </label>
+        </div>
       </Card>
+      </div>
+
+      {currentConversation && (
+        <Card className="p-3 sm:p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="text-xs text-muted-foreground">Conversation</div>
+              <div className="font-semibold text-sm sm:text-base truncate max-w-[240px] sm:max-w-none">
+                {currentConversation.title}
+              </div>
+            </div>
+            <Badge variant="secondary" className="text-[11px]">
+              {currentConversation.messages.length} message{currentConversation.messages.length === 1 ? '' : 's'}
+            </Badge>
+          </div>
+
+          <ScrollArea className="h-64 sm:h-72 rounded border bg-muted/20 p-3">
+            {currentConversation.messages.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-8">
+                No messages yet. Ask a question to start the conversation.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {currentConversation.messages.slice(-50).map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`p-3 rounded-lg border bg-card ${msg.role === 'assistant' ? 'border-accent/50' : 'border-muted'}`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <Badge variant={msg.role === 'assistant' ? 'secondary' : 'outline'} className="text-[11px] capitalize">
+                        {msg.role}
+                      </Badge>
+                      <span className="text-[11px] text-muted-foreground">
+                        {new Date(msg.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </Card>
+      )}
 
       {isLoading && (
         <motion.div
@@ -364,7 +630,7 @@ export function AgenticQueryInterface({
                   { phase: 'evaluation', label: 'Evaluation', icon: CheckCircle },
                   { phase: 'complete', label: 'Complete', icon: Check }
                 ].map(({ phase, label, icon: Icon }) => {
-                  const phaseSteps = progressSteps.filter(s => s.phase === phase)
+                  const phaseSteps = safeProgressSteps.filter(s => s.phase === phase)
                   const hasCompleted = phaseSteps.some(s => s.status === 'complete')
                   const isInProgress = phaseSteps.some(s => s.status === 'in_progress')
 
@@ -396,7 +662,7 @@ export function AgenticQueryInterface({
 
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 <AnimatePresence mode="popLayout">
-                  {progressSteps.map((step, index) => (
+                  {safeProgressSteps.map((step, index) => (
                     <motion.div
                       key={index}
                       initial={{ opacity: 0, x: -20 }}
@@ -423,7 +689,7 @@ export function AgenticQueryInterface({
                               {step.details}
                             </p>
                           )}
-                          {step.metadata?.subQueries && (
+                          {Array.isArray(step.metadata?.subQueries) && (
                             <div className="mt-1 space-y-0.5">
                               {(step.metadata.subQueries as string[]).slice(0, 3).map((sq, i) => (
                                 <div key={i} className="text-xs text-muted-foreground pl-4 border-l-2 border-accent/30">
@@ -520,13 +786,13 @@ export function AgenticQueryInterface({
                 </div>
               </div>
 
-              {response.sources.length > 0 && (
+              {safeSources.length > 0 && (
                 <>
                   <Separator className="my-3 sm:my-4" />
                   <div>
                     <p className="text-xs sm:text-sm font-medium mb-2">Sources:</p>
                     <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                      {response.sources.map((source, index) => (
+                      {safeSources.map((source, index) => (
                         <Badge key={index} variant="secondary" className="text-xs">
                           [{index + 1}] {source}
                         </Badge>
@@ -628,7 +894,7 @@ export function AgenticQueryInterface({
                                     {step.metadata.confidence !== undefined && (
                                       <div><span className="font-medium">Confidence:</span> {((step.metadata.confidence as number) * 100).toFixed(0)}%</div>
                                     )}
-                                    {step.metadata.subQueries && (
+                                    {Array.isArray(step.metadata.subQueries) && (
                                       <div>
                                         <div className="font-medium mb-1">Sub-queries:</div>
                                         <div className="space-y-0.5 pl-2">
@@ -640,7 +906,7 @@ export function AgenticQueryInterface({
                                         </div>
                                       </div>
                                     )}
-                                    {step.metadata.improvements && (
+                                    {Array.isArray(step.metadata.improvements) && (
                                       <div>
                                         <div className="font-medium mb-1">Improvements:</div>
                                         <div className="space-y-0.5 pl-2">
@@ -669,8 +935,8 @@ export function AgenticQueryInterface({
                     <TabsContent value="reformulations" className="mt-4">
                       <QueryReformulationGraph
                         data={{
-                          nodes: response.reformulations,
-                          links: response.reformulations
+                          nodes: safeReformulations,
+                          links: safeReformulations
                             .filter(r => r.parentId)
                             .map(r => ({
                               source: r.parentId!,
@@ -685,7 +951,7 @@ export function AgenticQueryInterface({
 
                     <TabsContent value="similarity" className="mt-4">
                       <QuerySimilarityMatrix
-                        queries={response.reformulations.map(r => ({
+                        queries={safeReformulations.map(r => ({
                           id: r.id,
                           query: r.query,
                           type: r.type
@@ -728,11 +994,11 @@ export function AgenticQueryInterface({
                         <span className="text-sm text-muted-foreground">Reasoning:</span>
                         <p className="text-sm mt-1 p-2 bg-muted rounded">{response.routing.reasoning}</p>
                       </div>
-                      {response.routing.subQueries && response.routing.subQueries.length > 0 && (
+                      {safeSubQueries.length > 0 && (
                         <div>
                           <span className="text-sm text-muted-foreground">Sub-queries:</span>
                           <ul className="text-sm mt-1 space-y-1">
-                            {response.routing.subQueries.map((sq, i) => (
+                            {safeSubQueries.map((sq, i) => (
                               <li key={i} className="p-2 bg-muted rounded">{i + 1}. {sq}</li>
                             ))}
                           </ul>
@@ -748,29 +1014,29 @@ export function AgenticQueryInterface({
                         </div>
                         <div>
                           <span className="text-muted-foreground">Documents:</span>
-                          <Badge variant="outline" className="mt-1">{response.retrieval.documents.length}</Badge>
+                          <Badge variant="outline" className="mt-1">{safeDocuments.length}</Badge>
                         </div>
                       </div>
-                      {response.retrieval.metadata?.ragFusionVariations && (
+                      {safeFusionVariants.length > 0 && (
                         <div>
                           <span className="text-sm text-muted-foreground">RAG Fusion Variations:</span>
                           <ul className="text-sm mt-1 space-y-1">
-                            {response.retrieval.metadata.ragFusionVariations.map((v, i) => (
+                            {safeFusionVariants.map((v, i) => (
                               <li key={i} className="p-2 bg-muted rounded">{i + 1}. {v}</li>
                             ))}
                           </ul>
                         </div>
                       )}
-                      {response.retrieval.documents.length > 0 && (
+                      {safeDocuments.length > 0 && (
                         <div>
                           <span className="text-sm text-muted-foreground">Retrieved Documents:</span>
                           <div className="space-y-2 mt-2">
-                            {response.retrieval.documents.slice(0, 3).map((doc, i) => (
+                            {safeDocuments.slice(0, 3).map((doc, i) => (
                               <div key={i} className="p-2 bg-muted rounded text-xs">
                                 <div className="flex justify-between items-start mb-1">
                                   <span className="font-medium">{doc.title}</span>
                                   <Badge variant="outline" className="text-xs">
-                                    {response.retrieval.scores[i]?.toFixed(2) || 'N/A'}
+                                    {safeScores[i]?.toFixed(2) || 'N/A'}
                                   </Badge>
                                 </div>
                                 <p className="text-muted-foreground line-clamp-2">{doc.content.slice(0, 150)}...</p>
@@ -825,11 +1091,11 @@ export function AgenticQueryInterface({
                           </div>
                         </div>
                       )}
-                      {response.metadata.improvementSuggestions && response.metadata.improvementSuggestions.length > 0 && (
+                      {safeImprovements.length > 0 && (
                         <div>
                           <span className="text-sm text-muted-foreground">Improvement Suggestions:</span>
                           <ul className="text-xs mt-1 space-y-1">
-                            {response.metadata.improvementSuggestions.slice(0, 3).map((suggestion, i) => (
+                            {safeImprovements.slice(0, 3).map((suggestion, i) => (
                               <li key={i} className="p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded flex items-start gap-2">
                                 <WarningCircle size={14} className="text-yellow-600 mt-0.5 flex-shrink-0" />
                                 {suggestion}
@@ -861,6 +1127,18 @@ export function AgenticQueryInterface({
                           <span className="text-muted-foreground">Needs Improvement:</span>
                           <Badge variant={response.metadata.needsImprovement ? 'destructive' : 'default'} className="mt-1">
                             {response.metadata.needsImprovement ? 'Yes' : 'No'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Retrieval Backend:</span>
+                          <Badge variant="outline" className="mt-1 text-xs capitalize">
+                            {response.metadata.retrievalBackend || 'local'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Cache Hit:</span>
+                          <Badge variant={response.metadata.cacheHit ? 'default' : 'secondary'} className="mt-1 text-xs">
+                            {response.metadata.cacheHit ? 'Yes' : 'No'}
                           </Badge>
                         </div>
                       </div>

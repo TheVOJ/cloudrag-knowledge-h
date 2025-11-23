@@ -4,6 +4,8 @@ import { RetrievalExecutor, RetrievalResult } from './retrieval-executor'
 import { SelfReflectiveRAG, SelfEvaluation, CriticFeedback } from './self-reflective-rag'
 import { StrategyPerformanceTracker } from './strategy-performance-tracker'
 import { runtime } from './runtime/manager'
+import { generateEmbedding } from './chunking'
+import { SemanticCache } from './semantic-cache'
 
 export type QueryReformulation = {
   id: string
@@ -44,6 +46,7 @@ export type AgenticRAGResponse = {
     confidence: number
     needsImprovement: boolean
     improvementSuggestions?: string[]
+    cacheHit?: boolean
   }
 }
 
@@ -54,6 +57,9 @@ export type AgenticRAGConfig = {
   enableAutoRetry?: boolean
   topK?: number
   onProgress?: (step: ProgressStep) => void
+  enableSemanticCache?: boolean
+  cacheTtlMs?: number
+  cacheConfidenceThreshold?: number
 }
 
 /**
@@ -74,6 +80,8 @@ export class AgenticRAGOrchestrator {
   private reflector: SelfReflectiveRAG
   private tracker: StrategyPerformanceTracker
   private conversationHistory: Array<{ query: string; response: string }> = []
+  private cache: SemanticCache
+  private knowledgeBaseId?: string
 
   constructor(
     private documents: Document[],
@@ -100,6 +108,9 @@ export class AgenticRAGOrchestrator {
     if (initialConversationHistory) {
       this.conversationHistory = initialConversationHistory
     }
+
+    this.knowledgeBaseId = knowledgeBaseId
+    this.cache = new SemanticCache()
   }
 
   private emitProgress(config: AgenticRAGConfig, step: Omit<ProgressStep, 'timestamp'>) {
@@ -167,6 +178,29 @@ export class AgenticRAGOrchestrator {
     let answer = ''
     let evaluation: SelfEvaluation | null = null
     let criticism: CriticFeedback | undefined
+
+    // Try semantic cache first (best-effort)
+    let queryEmbedding: number[] | null = null
+    if (config.enableSemanticCache !== false) {
+      try {
+        queryEmbedding = await generateEmbedding(userQuery)
+        const cached = this.knowledgeBaseId && queryEmbedding
+          ? await this.cache.get(queryEmbedding, this.knowledgeBaseId)
+          : null
+        if (cached) {
+          return {
+            ...cached,
+            metadata: {
+              ...cached.metadata,
+              cacheHit: true,
+              totalTimeMs: Date.now() - startTime
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Semantic cache lookup failed; continuing', error)
+      }
+    }
 
     while (iteration < maxIterations) {
       iteration++
@@ -647,6 +681,16 @@ export class AgenticRAGOrchestrator {
       }
     }
 
+    // Write-through semantic cache when enabled and confident enough
+    const cacheConfidence = config.cacheConfidenceThreshold ?? 0.55
+    if (config.enableSemanticCache !== false && queryEmbedding && this.knowledgeBaseId && evaluation.confidence >= cacheConfidence) {
+      try {
+        await this.cache.set(queryEmbedding, this.knowledgeBaseId, response, config.cacheTtlMs)
+      } catch (error) {
+        console.warn('Semantic cache set failed', error)
+      }
+    }
+
     await this.tracker.recordQueryPerformance(userQuery, response)
 
     return response
@@ -658,7 +702,7 @@ export class AgenticRAGOrchestrator {
 
 Keep it brief and friendly.`
 
-      return await runtime.llm.generate(prompt, 'gpt-4o-mini')
+      return await runtime.llm.generate(prompt, '@cf/meta/llama-3.3-70b-instruct-fp8-fast')
     }
 
     if (intent === 'out_of_scope') {
@@ -697,7 +741,7 @@ Instructions:
 
 Answer:`
 
-    return await runtime.llm.generate(prompt, 'gpt-4o')
+    return await runtime.llm.generate(prompt, '@cf/meta/llama-3.3-70b-instruct-fp8-fast')
   }
 
   private async reformulateQuery(
@@ -723,7 +767,7 @@ Generate a reformulated query that addresses these issues. Make it more specific
 Respond with ONLY the reformulated query, no explanation.`
 
     try {
-      const reformulated = await runtime.llm.generate(prompt, 'gpt-4o-mini')
+      const reformulated = await runtime.llm.generate(prompt, '@cf/meta/llama-3.3-70b-instruct-fp8-fast')
       return reformulated.trim()
     } catch {
       return originalQuery

@@ -9,6 +9,7 @@ import { fetchRepoContent, convertRepoToDocuments } from '@/lib/github-service'
 import { simulateOneDriveFetch } from '@/lib/onedrive-service'
 import { simulateDropboxFetch } from '@/lib/dropbox-service'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { KnowledgeBaseCard } from '@/components/KnowledgeBaseCard'
 import { CreateKnowledgeBaseDialog } from '@/components/CreateKnowledgeBaseDialog'
@@ -23,6 +24,8 @@ import { AzureSettingsDialog } from '@/components/AzureSettingsDialog'
 import { CloudStorageSettingsDialog, CloudStorageSettings } from '@/components/CloudStorageSettingsDialog'
 import { ChunkVisualizerDialog } from '@/components/ChunkVisualizerDialog'
 import { StrategyPerformanceDashboard } from '@/components/StrategyPerformanceDashboard'
+import { UnifiedAnalyticsDashboard } from '@/components/UnifiedAnalyticsDashboard'
+import { UnifiedQueryTracker, UnifiedQueryRecord, UnifiedQueryMethod } from '@/lib/unified-query-model'
 import { Database, Plus, ArrowLeft, ChartBar, MagnifyingGlass, FileText, Gear, Lightning, Brain } from '@phosphor-icons/react'
 import { toast, Toaster } from 'sonner'
 import { motion } from 'framer-motion'
@@ -57,10 +60,31 @@ function App() {
   const [visualizerDocument, setVisualizerDocument] = useState<Document | null>(null)
   const [agenticMode, setAgenticMode] = useState(false)
   const [chunkManager] = useState(() => new ChunkManager())
+  const [unifiedTracker] = useState(() => new UnifiedQueryTracker())
 
-  const kbs = knowledgeBases || []
-  const docs = documents || []
-  const qs = queries || []
+  function normalizeKnowledgeBase(kb: KnowledgeBase): KnowledgeBase {
+    return {
+      ...kb,
+      description: kb.description ?? '',
+      documentCount: typeof kb.documentCount === 'number' ? kb.documentCount : 0,
+      sources: Array.isArray(kb.sources) ? kb.sources : [],
+    }
+  }
+
+  const kbs = Array.isArray(knowledgeBases) ? knowledgeBases.map(normalizeKnowledgeBase) : []
+  const docs = Array.isArray(documents) ? documents : []
+  const qs = Array.isArray(queries) ? queries : []
+
+  useEffect(() => {
+    if (!Array.isArray(knowledgeBases)) return
+    const needsNormalization = knowledgeBases.some(
+      kb => !Array.isArray(kb.sources) || typeof kb.documentCount !== 'number' || kb.description === undefined
+    )
+
+    if (needsNormalization) {
+      setKnowledgeBases(knowledgeBases.map(normalizeKnowledgeBase))
+    }
+  }, [knowledgeBases, setKnowledgeBases])
   
   const handleCreateKB = async (name: string, description: string) => {
     const indexName = `kb-${generateId().toLowerCase().replace(/[^a-z0-9-]/g, '')}`
@@ -94,11 +118,41 @@ function App() {
     toast.success(`Knowledge base "${name}" created successfully`)
   }
   
-  const handleDeleteKB = (id: string) => {
+  const handleDeleteKB = async (id: string) => {
     const kb = kbs.find(k => k.id === id)
-    setKnowledgeBases((current) => (current || []).filter(k => k.id !== id))
-    setDocuments((current) => (current || []).filter(d => d.knowledgeBaseId !== id))
-    toast.success(`Knowledge base "${kb?.name}" deleted`)
+    if (!kb) return
+
+    const kbDocs = docs.filter(d => d.knowledgeBaseId === id)
+    const kbChunks = await chunkManager.getChunksByKB(id)
+
+    try {
+      if (kb.azureSearchEnabled && kb.azureIndexName && azureSettings?.enabled) {
+        const service = new AzureSearchService({
+          endpoint: azureSettings.endpoint,
+          apiKey: azureSettings.apiKey,
+          indexName: kb.azureIndexName
+        })
+
+        const idsToDelete = [...kbDocs.map(d => d.id), ...kbChunks.map(c => c.id)]
+        if (idsToDelete.length > 0) {
+          await service.deleteDocuments(idsToDelete)
+        }
+      }
+
+      await chunkManager.deleteChunksByKB(id)
+
+      setKnowledgeBases((current) => (current || []).filter(k => k.id !== id))
+      setDocuments((current) => (current || []).filter(d => d.knowledgeBaseId !== id))
+
+      if (selectedKB?.id === id) {
+        setSelectedKB(null)
+      }
+
+      toast.success(`Knowledge base "${kb.name}" deleted with chunk index cleanup`)
+    } catch (error) {
+      console.error('Failed to delete knowledge base cleanly', error)
+      toast.error('Failed to fully delete knowledge base. Check Azure and chunk storage state.')
+    }
   }
   
   const handleSelectKB = (kb: KnowledgeBase) => {
@@ -333,10 +387,34 @@ function App() {
     }
   }
   
-  const handleDeleteDocument = (id: string) => {
+  const handleDeleteDocument = async (id: string) => {
     const doc = docs.find(d => d.id === id)
     setDocuments((current) => (current || []).filter(d => d.id !== id))
-    
+
+    if (doc) {
+      const chunkIds = await chunkManager.getChunksByDocument(doc.id, doc.knowledgeBaseId)
+
+      // Remove from Azure index if enabled
+      if (selectedKB?.azureSearchEnabled && selectedKB.azureIndexName && azureSettings?.enabled) {
+        try {
+          const service = new AzureSearchService({
+            endpoint: azureSettings.endpoint,
+            apiKey: azureSettings.apiKey,
+            indexName: selectedKB.azureIndexName
+          })
+
+          const idsToDelete = [doc.id, ...chunkIds.map(c => c.id)]
+          await service.deleteDocuments(idsToDelete)
+        } catch (error) {
+          console.error('Azure delete failed', error)
+          toast.error('Failed to remove document from Azure index')
+        }
+      }
+
+      // Remove local chunks
+      await chunkManager.deleteChunksByDocument(doc.id, doc.knowledgeBaseId)
+    }
+
     if (selectedKB && doc) {
       setKnowledgeBases((current) =>
         (current || []).map(kb => 
@@ -371,29 +449,80 @@ function App() {
     setShowDocumentViewer(true)
   }
   
-  const handleSaveDocument = (id: string, title: string, content: string) => {
+  const handleSaveDocument = async (id: string, title: string, content: string) => {
+    const doc = docs.find(d => d.id === id)
+    if (!doc) return
+
+    // Update local state
+    const updatedDoc = {
+      ...doc,
+      title,
+      content,
+      metadata: { ...doc.metadata, lastModified: Date.now() }
+    }
+
     setDocuments((current) =>
-      (current || []).map(doc =>
-        doc.id === id
-          ? { ...doc, title, content, metadata: { ...doc.metadata, lastModified: Date.now() } }
-          : doc
-      )
+      (current || []).map(d => d.id === id ? updatedDoc : d)
     )
-    
+
     setViewingDocument((current) =>
-      current && current.id === id
-        ? { ...current, title, content, metadata: { ...current.metadata, lastModified: Date.now() } }
-        : current
+      current && current.id === id ? updatedDoc : current
     )
-    
-    toast.success('Document updated successfully')
+
+    // Sync to Azure if enabled
+    if (selectedKB?.azureSearchEnabled && selectedKB.azureIndexName && azureSettings?.enabled) {
+      try {
+        toast.info('Syncing changes to Azure...')
+
+        // Regenerate chunks for updated document
+        const newChunks = await chunkManager.chunkDocument(
+          updatedDoc.id,
+          updatedDoc.knowledgeBaseId,
+          updatedDoc.title,
+          updatedDoc.content,
+          updatedDoc.sourceType,
+          updatedDoc.sourceUrl,
+          updatedDoc.chunkStrategy || 'semantic'
+        )
+
+        // Update in Azure
+        const service = new AzureSearchService({
+          endpoint: azureSettings.endpoint,
+          apiKey: azureSettings.apiKey,
+          indexName: selectedKB.azureIndexName
+        })
+
+        await service.updateDocument(updatedDoc, newChunks)
+
+        // Update local chunk count
+        setDocuments((current) =>
+          (current || []).map(d =>
+            d.id === id ? { ...d, chunkCount: newChunks.length } : d
+          )
+        )
+
+        toast.success('Document updated and synced to Azure')
+      } catch (error) {
+        console.error('Failed to sync document update to Azure', error)
+        toast.error('Document updated locally, but Azure sync failed')
+      }
+    } else {
+      toast.success('Document updated successfully')
+    }
   }
   
-  const handleQuery = (query: string, response: string, sources: string[], searchMethod: 'simulated' | 'azure' | 'agentic') => {
+  const handleQuery = async (
+    query: string,
+    response: string,
+    sources: string[],
+    searchMethod: 'simulated' | 'azure' | 'agentic',
+    analyticsMetadata?: Partial<UnifiedQueryRecord>
+  ) => {
     if (!selectedKB) return
     
+    const id = generateId()
     const newQuery: Query = {
-      id: generateId(),
+      id,
       knowledgeBaseId: selectedKB.id,
       query,
       response,
@@ -403,10 +532,92 @@ function App() {
     }
     
     setQueries((current) => [...(current || []), newQuery])
+
+    const unifiedRecord: UnifiedQueryRecord = {
+      id,
+      timestamp: newQuery.timestamp,
+      knowledgeBaseId: selectedKB.id,
+      query,
+      response,
+      sources,
+      method: searchMethod === 'simulated' ? 'standard' : searchMethod,
+      ...analyticsMetadata
+    }
+
+    // Ensure required fields stay aligned with current context
+    unifiedRecord.knowledgeBaseId = selectedKB.id
+    unifiedRecord.method = searchMethod === 'simulated' ? 'standard' : searchMethod
+
+    await unifiedTracker.recordQuery(unifiedRecord)
   }
   
   const handleSaveAzureSettings = (settings: AzureSearchSettings) => {
     setAzureSettings(settings)
+  }
+
+  const generateSampleQueries = async (kb: KnowledgeBase) => {
+    const now = Date.now()
+    const samples: Array<{
+      method: UnifiedQueryMethod
+      query: string
+      feedback: UnifiedQueryRecord['userFeedback']
+      confidence: number
+      timeMs: number
+    }> = [
+      {
+        method: 'standard',
+        query: `What is ${kb.name} about?`,
+        feedback: 'positive',
+        confidence: 0.82,
+        timeMs: 320
+      },
+      {
+        method: 'azure',
+        query: `Summarize top sources for ${kb.name}`,
+        feedback: 'neutral',
+        confidence: 0.67,
+        timeMs: 210
+      },
+      {
+        method: 'agentic',
+        query: `Compare two key concepts inside ${kb.name}`,
+        feedback: 'negative',
+        confidence: 0.45,
+        timeMs: 540
+      }
+    ]
+
+    const generatedQueries = samples.map((sample, idx) => ({
+      id: generateId(),
+      knowledgeBaseId: kb.id,
+      query: sample.query,
+      response: `Sample response for "${sample.query}"`,
+      sources: ['Sample Source'],
+      timestamp: now + idx,
+      searchMethod: sample.method === 'standard' ? 'simulated' : sample.method
+    }))
+
+    setQueries((current) => [...(current || []), ...generatedQueries])
+
+    for (let i = 0; i < samples.length; i++) {
+      const sample = samples[i]
+      const q = generatedQueries[i]
+      await unifiedTracker.recordQuery({
+        id: q.id,
+        timestamp: q.timestamp,
+        knowledgeBaseId: kb.id,
+        query: q.query,
+        response: q.response,
+        sources: q.sources,
+        method: sample.method,
+        userFeedback: sample.feedback,
+        confidence: sample.confidence,
+        timeMs: sample.timeMs,
+        retrievalBackend: sample.method === 'azure' ? 'azure' : 'local'
+      })
+    }
+
+    toast.success('Generated sample queries for analytics')
   }
   
   const handleSaveCloudStorageSettings = (settings: CloudStorageSettings) => {
@@ -509,6 +720,7 @@ function App() {
     if (!selectedKB) return null
     
     const kbDocs = getKBDocuments(selectedKB.id)
+    const kbHasAnalytics = qs.some(q => q.knowledgeBaseId === selectedKB.id)
     
     return (
       <div className="space-y-4 sm:space-y-6">
@@ -560,7 +772,7 @@ function App() {
         </div>
         
         <Tabs defaultValue="query" className="space-y-4">
-          <TabsList className="w-full sm:w-auto grid grid-cols-2">
+          <TabsList className={`w-full sm:w-auto grid ${kbHasAnalytics ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <TabsTrigger value="query" className="gap-2">
               <MagnifyingGlass size={16} />
               <span className="text-xs sm:text-sm">Query</span>
@@ -569,7 +781,26 @@ function App() {
               <FileText size={16} />
               <span className="text-xs sm:text-sm">Documents ({kbDocs.length})</span>
             </TabsTrigger>
+            {kbHasAnalytics && (
+              <TabsTrigger value="analytics" className="gap-2">
+                <ChartBar size={16} />
+                <span className="text-xs sm:text-sm">Analytics</span>
+              </TabsTrigger>
+            )}
           </TabsList>
+
+          {!kbHasAnalytics && (
+            <Card className="p-3 sm:p-4 border-dashed">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="text-sm text-muted-foreground">
+                  Analytics will appear once this knowledge base has queries.
+                </div>
+                <Button size="sm" onClick={() => generateSampleQueries(selectedKB)} className="w-full sm:w-auto">
+                  Generate sample queries
+                </Button>
+              </div>
+            </Card>
+          )}
           
           <TabsContent value="query">
             {kbDocs.length === 0 ? (
@@ -623,6 +854,7 @@ function App() {
                 
                 {agenticMode ? (
                   <AgenticQueryInterface
+                    knowledgeBaseId={selectedKB.id}
                     knowledgeBaseName={selectedKB.name}
                     documents={kbDocs}
                     onQuery={handleQuery}
@@ -631,6 +863,7 @@ function App() {
                   />
                 ) : (
                   <QueryInterface
+                    knowledgeBaseId={selectedKB.id}
                     knowledgeBaseName={selectedKB.name}
                     documents={kbDocs}
                     onQuery={handleQuery}
@@ -680,6 +913,16 @@ function App() {
               </div>
             )}
           </TabsContent>
+
+          {kbHasAnalytics && (
+            <TabsContent value="analytics">
+              <UnifiedAnalyticsDashboard
+                knowledgeBaseId={selectedKB.id}
+                knowledgeBases={kbs}
+                onGenerateSamples={() => generateSampleQueries(selectedKB)}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     )
@@ -693,8 +936,27 @@ function App() {
           View query history and usage patterns
         </p>
       </div>
-      
-      <QueryHistory queries={qs} knowledgeBases={kbs} />
+
+      {qs.length === 0 ? (
+        <Card className="p-8 text-center space-y-3">
+          <h3 className="text-lg font-semibold">No analytics yet</h3>
+          <p className="text-sm text-muted-foreground">Run a few searches or generate samples to see the dashboard.</p>
+          {kbs.length > 0 && (
+            <Button onClick={() => generateSampleQueries(selectedKB || kbs[0])} className="gap-2" size="sm">
+              Generate sample queries
+            </Button>
+          )}
+        </Card>
+      ) : (
+        <>
+          <UnifiedAnalyticsDashboard
+            knowledgeBaseId={selectedKB?.id}
+            knowledgeBases={kbs}
+            onGenerateSamples={selectedKB ? () => generateSampleQueries(selectedKB) : undefined}
+          />
+          <QueryHistory queries={qs} knowledgeBases={kbs} />
+        </>
+      )}
     </div>
   )
   

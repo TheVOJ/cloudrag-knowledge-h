@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
@@ -74,6 +74,9 @@ export function ChunkVisualizerDialog({ document, open, onOpenChange }: ChunkVis
             <Brain size={24} weight="duotone" className="text-primary" />
             Document Chunking & Embeddings
           </DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Inspect how this document is split into chunks, visualize embeddings, and compare semantic similarity.
+          </DialogDescription>
         </DialogHeader>
 
         {document && (

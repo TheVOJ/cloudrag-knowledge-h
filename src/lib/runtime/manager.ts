@@ -41,6 +41,14 @@ class RuntimeManager {
   get kv() {
     return this.adapter.kv
   }
+
+  get embedder() {
+    return this.adapter.embedder
+  }
+
+  get vectorStore() {
+    return this.adapter.vectorStore
+  }
 }
 
 // Export singleton instance

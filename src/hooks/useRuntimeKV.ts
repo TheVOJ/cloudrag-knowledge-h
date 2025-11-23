@@ -5,7 +5,9 @@ import { runtime } from '@/lib/runtime/manager'
  * Custom hook that works like Spark's useKV but uses our runtime abstraction
  * This allows the app to work both locally (localStorage) and on Spark platform
  */
-export function useRuntimeKV<T>(key: string, defaultValue: T): [T, (value: T) => void] {
+type Updater<T> = T | ((prev: T) => T)
+
+export function useRuntimeKV<T>(key: string, defaultValue: T): [T, (value: Updater<T>) => void] {
   const [value, setValue] = useState<T>(defaultValue)
   const [initialized, setInitialized] = useState(false)
 
@@ -22,9 +24,13 @@ export function useRuntimeKV<T>(key: string, defaultValue: T): [T, (value: T) =>
   }, [key])
 
   // Update storage when value changes
-  const updateValue = async (newValue: T) => {
-    setValue(newValue)
-    await runtime.kv.set(key, newValue)
+  const updateValue = async (newValue: Updater<T>) => {
+    setValue((prev) => {
+      const resolved = typeof newValue === 'function' ? (newValue as (p: T) => T)(prev) : newValue
+      // Persist in background; no need to block render
+      runtime.kv.set(key, resolved).catch((err) => console.warn('KV set failed', err))
+      return resolved
+    })
   }
 
   return [value, updateValue]

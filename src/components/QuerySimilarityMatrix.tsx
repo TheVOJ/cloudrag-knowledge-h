@@ -16,20 +16,22 @@ interface QuerySimilarityMatrixProps {
 }
 
 export function QuerySimilarityMatrix({ queries, calculateSimilarity }: QuerySimilarityMatrixProps) {
+  const safeQueries = Array.isArray(queries) ? queries : []
+
   const similarityMatrix = useMemo(() => {
     const matrix: number[][] = []
-    for (let i = 0; i < queries.length; i++) {
+    for (let i = 0; i < safeQueries.length; i++) {
       matrix[i] = []
-      for (let j = 0; j < queries.length; j++) {
+      for (let j = 0; j < safeQueries.length; j++) {
         if (i === j) {
           matrix[i][j] = 1
         } else {
-          matrix[i][j] = calculateSimilarity(queries[i].query, queries[j].query)
+          matrix[i][j] = calculateSimilarity(safeQueries[i].query, safeQueries[j].query)
         }
       }
     }
     return matrix
-  }, [queries, calculateSimilarity])
+  }, [safeQueries, calculateSimilarity])
 
   const getColorForSimilarity = (similarity: number): string => {
     if (similarity >= 0.8) return 'bg-green-500'
@@ -47,7 +49,7 @@ export function QuerySimilarityMatrix({ queries, calculateSimilarity }: QuerySim
     return 'text-red-600'
   }
 
-  if (queries.length < 2) {
+  if (safeQueries.length < 2) {
     return (
       <Card className="p-6">
         <div className="flex flex-col items-center justify-center text-center space-y-2">
@@ -70,7 +72,7 @@ export function QuerySimilarityMatrix({ queries, calculateSimilarity }: QuerySim
           <GitDiff size={20} weight="duotone" className="text-primary" />
           <h3 className="text-sm font-semibold">Query Similarity Matrix</h3>
           <Badge variant="secondary" className="text-xs">
-            {queries.length}x{queries.length}
+            {safeQueries.length}x{safeQueries.length}
           </Badge>
         </div>
         <TooltipProvider>
@@ -90,9 +92,9 @@ export function QuerySimilarityMatrix({ queries, calculateSimilarity }: QuerySim
 
       <Card className="p-4 overflow-x-auto">
         <div className="min-w-max">
-          <div className="grid gap-1" style={{ gridTemplateColumns: `80px repeat(${queries.length}, 60px)` }}>
+            <div className="grid gap-1" style={{ gridTemplateColumns: `80px repeat(${safeQueries.length}, 60px)` }}>
             <div className="h-20"></div>
-            {queries.map((query, idx) => (
+            {safeQueries.map((query, idx) => (
               <TooltipProvider key={idx}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -118,7 +120,7 @@ export function QuerySimilarityMatrix({ queries, calculateSimilarity }: QuerySim
               </TooltipProvider>
             ))}
             
-            {queries.map((rowQuery, rowIdx) => (
+            {safeQueries.map((rowQuery, rowIdx) => (
               <>
                 <TooltipProvider key={`row-${rowIdx}`}>
                   <Tooltip>
@@ -136,7 +138,7 @@ export function QuerySimilarityMatrix({ queries, calculateSimilarity }: QuerySim
                   </Tooltip>
                 </TooltipProvider>
 
-                {queries.map((colQuery, colIdx) => {
+                {safeQueries.map((colQuery, colIdx) => {
                   const similarity = similarityMatrix[rowIdx][colIdx]
                   const isDiagonal = rowIdx === colIdx
                   
@@ -215,31 +217,39 @@ export function QuerySimilarityMatrix({ queries, calculateSimilarity }: QuerySim
               <div className="p-2 rounded bg-background">
                 <div className="text-muted-foreground">Avg Similarity</div>
                 <div className="font-semibold text-sm mt-0.5">
-                  {(
-                    similarityMatrix.flat().filter((v, i) => i % (queries.length + 1) !== 0).reduce((a, b) => a + b, 0) / 
-                    (queries.length * queries.length - queries.length)
-                  ).toFixed(1)}%
+                  {safeQueries.length > 1
+                    ? (
+                        similarityMatrix.flat().filter((v, i) => i % (safeQueries.length + 1) !== 0).reduce((a, b) => a + b, 0) /
+                        (safeQueries.length * safeQueries.length - safeQueries.length)
+                      ).toFixed(1)
+                    : '0.0'}%
                 </div>
               </div>
               <div className="p-2 rounded bg-background">
                 <div className="text-muted-foreground">Max Similarity</div>
                 <div className="font-semibold text-sm mt-0.5">
-                  {Math.max(...similarityMatrix.flat().filter((v, i) => i % (queries.length + 1) !== 0)) * 100}%
+                  {safeQueries.length > 1
+                    ? (Math.max(...similarityMatrix.flat().filter((v, i) => i % (safeQueries.length + 1) !== 0)) * 100).toFixed(1)
+                    : '0.0'}%
                 </div>
               </div>
               <div className="p-2 rounded bg-background">
                 <div className="text-muted-foreground">Min Similarity</div>
                 <div className="font-semibold text-sm mt-0.5">
-                  {(Math.min(...similarityMatrix.flat().filter((v, i) => i % (queries.length + 1) !== 0)) * 100).toFixed(1)}%
+                  {safeQueries.length > 1
+                    ? (Math.min(...similarityMatrix.flat().filter((v, i) => i % (safeQueries.length + 1) !== 0)) * 100).toFixed(1)
+                    : '0.0'}%
                 </div>
               </div>
               <div className="p-2 rounded bg-background">
                 <div className="text-muted-foreground">Diversity</div>
                 <div className="font-semibold text-sm mt-0.5">
-                  {(
-                    (1 - similarityMatrix.flat().filter((v, i) => i % (queries.length + 1) !== 0).reduce((a, b) => a + b, 0) / 
-                    (queries.length * queries.length - queries.length)) * 100
-                  ).toFixed(1)}%
+                  {safeQueries.length > 1
+                    ? (
+                        (1 - similarityMatrix.flat().filter((v, i) => i % (safeQueries.length + 1) !== 0).reduce((a, b) => a + b, 0) /
+                        (safeQueries.length * safeQueries.length - safeQueries.length)) * 100
+                      ).toFixed(1)
+                    : '0.0'}%
                 </div>
               </div>
             </div>

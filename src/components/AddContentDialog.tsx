@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -95,6 +95,9 @@ export function AddContentDialog({ open, onOpenChange, onAdd, onShowFileUpload }
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-lg sm:text-xl">Add Content to Knowledge Base</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Choose a source type and provide a URL or upload files to ingest content into this knowledge base.
+          </DialogDescription>
         </DialogHeader>
         
         <Tabs value={sourceType} onValueChange={(v) => setSourceType(v as SourceType)}>

@@ -7,7 +7,7 @@ import { formatDate, getSourceIcon, getSourceLabel, extractDomain } from '@/lib/
 
 interface DocumentListItemProps {
   document: Document
-  onDelete: (id: string) => void
+  onDelete: (id: string) => Promise<void> | void
   onView: (document: Document) => void
   onEdit: (document: Document) => void
   onViewChunks?: (document: Document) => void

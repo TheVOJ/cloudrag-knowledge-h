@@ -1,3 +1,4 @@
+import { EMBEDDING_DIMENSION, MAX_EMBEDDING_TEXT_LENGTH } from './embedding-constants'
 import { runtime } from './runtime/manager'
 
 export interface Chunk {
@@ -141,32 +142,30 @@ function estimateTokens(text: string): number {
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-  try {
-    const truncatedText = text.substring(0, 1000)
-    const prompt = `Generate a semantic embedding representation for the following text. Return only a JSON object with a single property "embedding" containing an array of 384 floating point numbers between -1 and 1: ${truncatedText}`
-
-    const result = await runtime.llm.generate(prompt, 'gpt-4o-mini', true)
-    const parsed = JSON.parse(result)
-    
-    if (parsed.embedding && Array.isArray(parsed.embedding)) {
-      return parsed.embedding.slice(0, 384)
+  // Prefer native embedding provider (Workers AI) when available
+  if (runtime.embedder) {
+    try {
+      const [vec] = await runtime.embedder.embed([text.substring(0, MAX_EMBEDDING_TEXT_LENGTH)])
+      if (Array.isArray(vec) && vec.length > 0) return vec
+    } catch (e) {
+      console.warn('Embedding provider failed, falling back to simulated embedding', e)
     }
-    
-    return generateSimulatedEmbedding(text)
-  } catch {
-    return generateSimulatedEmbedding(text)
   }
+
+  // Fallback to simulated embeddings if no provider available
+  return generateSimulatedEmbedding(text)
 }
 
 function generateSimulatedEmbedding(text: string): number[] {
   const hash = simpleHash(text)
   const embedding: number[] = []
-  
-  for (let i = 0; i < 384; i++) {
+
+  // Use EMBEDDING_DIMENSION dimensions to match the configured Vectorize index
+  for (let i = 0; i < EMBEDDING_DIMENSION; i++) {
     const value = Math.sin(hash * (i + 1)) * Math.cos(hash * (i + 1) * 0.5)
     embedding.push(value)
   }
-  
+
   const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0))
   return embedding.map((val) => val / magnitude)
 }

@@ -66,6 +66,11 @@ npm run preview
 - **`tsconfig.json`**: TypeScript configuration
 - **`vite.config.ts`**: Vite configuration
 
+## Recent Changes
+
+- **Unified analytics feed:** Standard, Azure, and Agentic queries all flow through `UnifiedQueryTracker`. When adding a new query surface, pass analytics metadata to the shared `onQuery` handler and call `unifiedTracker.recordQuery` so the `UnifiedAnalyticsDashboard` stays in sync (method, KB id, timing, feedback).
+- **Conversation UX:** `ConversationList` now supports mobile via a sheet, shows loading/empty states, and allows inline rename. Conversation titles auto-update to the first user message; if you create conversations elsewhere, keep using `ConversationManager` so this behavior applies automatically.
+
 ## Testing
 
 Currently, the project relies on manual verification as detailed in `AGENTIC_VERIFICATION.md`.

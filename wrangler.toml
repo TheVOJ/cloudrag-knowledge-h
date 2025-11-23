@@ -10,6 +10,11 @@ enabled = true
 [ai]
 binding = "AI"
 
+# Vectorize binding (for semantic search)
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "kb-embeddings"
+
 # KV namespace binding
 [[kv_namespaces]]
 binding = "KV"
@@ -30,6 +35,10 @@ name = "cloudrag-knowledge-h-dev"
 
 [env.development.ai]
 binding = "AI"
+
+[[env.development.vectorize]]
+binding = "VECTORIZE"
+index_name = "kb-embeddings-dev"
 
 [[env.development.kv_namespaces]]
 binding = "KV"

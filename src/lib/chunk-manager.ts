@@ -42,6 +42,27 @@ export class ChunkManager {
     // Store chunks
     await this.saveChunks(knowledgeBaseId, documentChunks)
 
+    // Upsert into vector store when available
+    if (runtime.vectorStore) {
+      try {
+        await runtime.vectorStore.upsert(
+          documentChunks
+            .filter(c => c.embedding && c.embedding.length > 0)
+            .map(c => ({
+              id: c.id,
+              values: c.embedding!,
+              metadata: {
+                kbId: knowledgeBaseId,
+                docId: documentId,
+                chunkIndex: c.chunkIndex,
+              }
+            }))
+        )
+      } catch (error) {
+        console.warn('Vector upsert failed; continuing without vector index', error)
+      }
+    }
+
     return documentChunks
   }
 
@@ -67,11 +88,30 @@ export class ChunkManager {
     const chunks = await this.getChunksByKB(knowledgeBaseId)
     const filtered = chunks.filter(c => c.documentId !== documentId)
     await runtime.kv.set(storageKey, filtered)
+
+    if (runtime.vectorStore) {
+      const idsToDelete = chunks.filter(c => c.documentId === documentId).map(c => c.id)
+      try {
+        await runtime.vectorStore.delete(idsToDelete)
+      } catch (error) {
+        console.warn('Vector delete failed; chunks removed from KV only', error)
+      }
+    }
   }
 
   async deleteChunksByKB(knowledgeBaseId: string): Promise<void> {
     const storageKey = `${ChunkManager.STORAGE_KEY_PREFIX}-${knowledgeBaseId}`
     await runtime.kv.delete(storageKey)
+
+    if (runtime.vectorStore) {
+      const chunks = await this.getChunksByKB(knowledgeBaseId)
+      const idsToDelete = chunks.map(c => c.id)
+      try {
+        await runtime.vectorStore.delete(idsToDelete)
+      } catch (error) {
+        console.warn('Vector delete failed during KB purge', error)
+      }
+    }
   }
 
   async searchChunks(

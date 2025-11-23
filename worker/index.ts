@@ -1,12 +1,15 @@
 /**
  * Cloudflare Worker entry point
- * Handles API requests for LLM and KV operations
+ * Handles API requests for LLM, KV, embeddings, and Vectorize operations
  */
+import type { Ai, Vectorize, VectorizeVector } from '@cloudflare/workers-types'
+import { DEFAULT_CF_EMBEDDING_MODEL, EMBEDDING_DIMENSION, MAX_EMBEDDING_TEXT_LENGTH } from '../src/lib/embedding-constants'
 
 export interface Env {
   AI: Ai
   KV: KVNamespace
   ASSETS: Fetcher
+  VECTORIZE: Vectorize
 }
 
 export default {
@@ -62,6 +65,106 @@ async function handleAPI(request: Request, env: Env, corsHeaders: Record<string,
     }) as { response?: string }
 
     return new Response(JSON.stringify({ response: response.response || '' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Embeddings API (Workers AI)
+  if (path === '/api/embed' && request.method === 'POST') {
+    const { texts, model = DEFAULT_CF_EMBEDDING_MODEL } = await request.json() as {
+      texts: string[]
+      model?: string
+    }
+
+    if (!Array.isArray(texts) || texts.length === 0) {
+      return new Response(JSON.stringify({ error: 'texts must be a non-empty array' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Generate embeddings for each text individually (EMBEDDING_DIMENSION dimensions)
+    const embeddings: number[][] = []
+    for (const text of texts) {
+      const result = await env.AI.run(model, {
+        text: text.substring(0, MAX_EMBEDDING_TEXT_LENGTH) // Limit to model's max input length
+      }) as { data?: number[][] }
+
+      if (result.data && result.data[0]) {
+        embeddings.push(result.data[0])
+      }
+    }
+
+    return new Response(JSON.stringify({ embeddings }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Vectorize: upsert
+  if (path === '/api/vector/upsert' && request.method === 'POST') {
+    const { vectors } = await request.json() as { vectors: Array<{ id: string; values: number[]; metadata?: Record<string, any> }> }
+
+    if (!Array.isArray(vectors) || vectors.length === 0) {
+      return new Response(JSON.stringify({ error: 'vectors must be a non-empty array' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const invalidVector = vectors.find(v => v.values.length !== EMBEDDING_DIMENSION)
+    if (invalidVector) {
+      return new Response(JSON.stringify({
+        error: `Vector dimension mismatch for id ${invalidVector.id}: expected ${EMBEDDING_DIMENSION}, received ${invalidVector.values.length}`
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const payload: VectorizeVector[] = vectors.map(v => ({ id: v.id, values: v.values, metadata: v.metadata }))
+    await env.VECTORIZE.upsert(payload)
+
+    return new Response(JSON.stringify({ success: true, count: vectors.length }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Vectorize: query
+  if (path === '/api/vector/query' && request.method === 'POST') {
+    const { vector, topK = 5, filter } = await request.json() as { vector: number[]; topK?: number; filter?: Record<string, any> }
+
+    if (!Array.isArray(vector) || vector.length === 0) {
+      return new Response(JSON.stringify({ error: 'vector is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const matches = await env.VECTORIZE.query(vector, {
+      topK,
+      filter
+    })
+
+    const list = (matches as any).matches || matches || []
+
+    return new Response(JSON.stringify({ matches: list }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Vectorize: delete
+  if (path === '/api/vector/delete' && request.method === 'POST') {
+    const { ids } = await request.json() as { ids: string[] }
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return new Response(JSON.stringify({ error: 'ids must be a non-empty array' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    await env.VECTORIZE.deleteByIds(ids)
+    return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }

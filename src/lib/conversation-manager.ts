@@ -30,8 +30,8 @@ export interface Conversation {
 
 export class ConversationManager {
   private static STORAGE_KEY = 'conversations'
-  private static MAX_CONVERSATIONS = 100
-  private static MAX_MESSAGES_PER_CONVERSATION = 50
+  static readonly MAX_CONVERSATIONS = 100
+  static readonly MAX_MESSAGES_PER_CONVERSATION = 50
 
   async createConversation(knowledgeBaseId: string, initialQuery?: string): Promise<Conversation> {
     const conversation: Conversation = {
@@ -72,6 +72,8 @@ export class ConversationManager {
       throw new Error('Conversation not found')
     }
 
+    const isFirstUserMessage = role === 'user' && conversation.metadata.totalQueries === 0
+
     const message: Message = {
       id: this.generateId(),
       role,
@@ -82,6 +84,14 @@ export class ConversationManager {
 
     conversation.messages.push(message)
     conversation.updatedAt = Date.now()
+
+    if (isFirstUserMessage) {
+      // Rename untitled conversations using the first user message
+      const suggestedTitle = content.trim().slice(0, 60)
+      if (suggestedTitle) {
+        conversation.title = suggestedTitle
+      }
+    }
 
     // Update metadata
     if (role === 'user') {
@@ -131,6 +141,7 @@ export class ConversationManager {
 
     if (conversation) {
       conversation.title = title
+      conversation.updatedAt = Date.now()
       await runtime.kv.set(ConversationManager.STORAGE_KEY, conversations)
     }
   }

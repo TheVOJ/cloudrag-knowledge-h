@@ -1,4 +1,5 @@
 import { Document, DocumentChunk } from './types'
+import { EMBEDDING_DIMENSION } from './embedding-constants'
 
 export interface AzureSearchConfig {
   endpoint: string
@@ -35,17 +36,27 @@ export interface SearchResult {
   content: string
   score: number
   highlights?: string[]
+  documentId?: string
+  chunkIndex?: number
+  rerankerScore?: number  // Semantic L2 reranking score (when using hybrid search with semantic ranking)
+  captions?: Array<{ text: string; highlights?: string }>  // Extractive captions (key passages)
+  answers?: Array<{ text: string; score: number; highlights?: string }>  // Extractive answers
 }
 
 export class AzureSearchService {
   private config: AzureSearchConfig
-  private apiVersion = '2023-11-01'
+  private apiVersion = '2024-11-01-preview'
 
   constructor(config: AzureSearchConfig) {
     this.config = config
   }
 
-  private async makeRequest(path: string, method: string, body?: unknown) {
+  private async makeRequest(
+    path: string,
+    method: string,
+    body?: unknown,
+    options?: { timeoutMs?: number; signal?: AbortSignal }
+  ) {
     const url = `${this.config.endpoint}${path}?api-version=${this.apiVersion}`
 
     const headers: Record<string, string> = {
@@ -53,11 +64,23 @@ export class AzureSearchService {
       'api-key': this.config.apiKey,
     }
 
+    const controller = options?.signal ? null : new AbortController()
+    const timeoutMs = options?.timeoutMs ?? 5000
+    const signal = options?.signal || controller?.signal
+
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+    if (controller) {
+      timeoutHandle = setTimeout(() => controller.abort('timeout'), timeoutMs)
+    }
+
     const response = await fetch(url, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
+      signal
     })
+
+    if (timeoutHandle) clearTimeout(timeoutHandle)
 
     if (!response.ok) {
       const error = await response.text()
@@ -77,8 +100,56 @@ export class AzureSearchService {
         { name: 'sourceType', type: 'Edm.String', filterable: true, facetable: true },
         { name: 'sourceUrl', type: 'Edm.String', filterable: true },
         { name: 'addedAt', type: 'Edm.Int64', filterable: true, sortable: true },
+        { name: 'documentId', type: 'Edm.String', filterable: true, facetable: true },
+        { name: 'chunkIndex', type: 'Edm.Int32', filterable: true, sortable: true },
         { name: 'chunks', type: 'Collection(Edm.String)', searchable: true },
+        // Vector field configured for EMBEDDING_DIMENSION-dim embeddings
+        {
+          name: 'embedding',
+          type: 'Collection(Edm.Single)',
+          searchable: true,
+          dimensions: EMBEDDING_DIMENSION,
+          vectorSearchProfile: 'default-vector-profile'
+        },
       ],
+      // Vector search configuration using HNSW algorithm
+      vectorSearch: {
+        algorithms: [
+          {
+            name: 'default-algorithm',
+            kind: 'hnsw',
+            hnswParameters: {
+              metric: 'cosine',
+              m: 4,
+              efConstruction: 400,
+              efSearch: 500
+            }
+          }
+        ],
+        profiles: [
+          {
+            name: 'default-vector-profile',
+            algorithm: 'default-algorithm'
+          }
+        ]
+      },
+      // Semantic configuration for L2 reranking
+      semantic: {
+        configurations: [
+          {
+            name: 'default',
+            prioritizedFields: {
+              titleField: {
+                fieldName: 'title'
+              },
+              contentFields: [
+                { fieldName: 'content' },
+                { fieldName: 'chunks' }
+              ]
+            }
+          }
+        ]
+      },
       scoringProfiles: [
         {
           name: 'recentBoost',
@@ -171,13 +242,14 @@ export class AzureSearchService {
     query: string,
     top: number = 5,
     filter?: string,
-    mode: 'semantic' | 'keyword' = 'semantic'
+    mode: 'semantic' | 'keyword' = 'semantic',
+    options?: { timeoutMs?: number }
   ): Promise<SearchResult[]> {
     const searchBody: any = {
       search: query,
       top,
       filter,
-      select: 'id,title,content',
+      select: 'id,title,content,documentId,chunkIndex',
       highlight: 'content',
       highlightPreTag: '<mark>',
       highlightPostTag: '</mark>',
@@ -194,7 +266,8 @@ export class AzureSearchService {
     const response = await this.makeRequest(
       `/indexes/${this.config.indexName}/docs/search`,
       'POST',
-      searchBody
+      searchBody,
+      { timeoutMs: options?.timeoutMs }
     )
 
     return response.value.map((result: any) => ({
@@ -203,6 +276,129 @@ export class AzureSearchService {
       content: result.content,
       score: result['@search.score'],
       highlights: result['@search.highlights']?.content,
+      documentId: result.documentId || result.id,
+      chunkIndex: result.chunkIndex
+    }))
+  }
+
+  async vectorSearch(
+    queryEmbedding: number[],
+    top: number = 5,
+    filter?: string,
+    options?: { timeoutMs?: number }
+  ): Promise<SearchResult[]> {
+    if (!queryEmbedding || queryEmbedding.length !== EMBEDDING_DIMENSION) {
+      throw new Error(`Query embedding must be a ${EMBEDDING_DIMENSION}-dimensional vector`)
+    }
+
+    const searchBody = {
+      vectorQueries: [
+        {
+          kind: 'vector',
+          vector: queryEmbedding,
+          fields: 'embedding',
+          k: top
+        }
+      ],
+      select: 'id,title,content,documentId,chunkIndex',
+      filter
+    }
+
+    const response = await this.makeRequest(
+      `/indexes/${this.config.indexName}/docs/search`,
+      'POST',
+      searchBody,
+      { timeoutMs: options?.timeoutMs }
+    )
+
+    return response.value.map((result: any) => ({
+      id: result.id,
+      title: result.title,
+      content: result.content,
+      score: result['@search.score'],
+      documentId: result.documentId || result.id,
+      chunkIndex: result.chunkIndex
+    }))
+  }
+
+  async hybridSearch(
+    query: string,
+    queryEmbedding: number[],
+    top: number = 5,
+    useSemanticRanking: boolean = true,
+    filter?: string,
+    options?: {
+      timeoutMs?: number
+      includeCaptions?: boolean
+      includeAnswers?: boolean
+      useQueryRewrites?: boolean
+      queryLanguage?: string
+    }
+  ): Promise<SearchResult[]> {
+    if (!queryEmbedding || queryEmbedding.length !== EMBEDDING_DIMENSION) {
+      throw new Error(`Query embedding must be a ${EMBEDDING_DIMENSION}-dimensional vector`)
+    }
+
+    const searchBody: any = {
+      search: query,
+      vectorQueries: [
+        {
+          kind: 'vector',
+          vector: queryEmbedding,
+          fields: 'embedding',
+          k: 50  // Retrieve top 50 candidates for semantic reranking (Azure limit)
+        }
+      ],
+      top,
+      select: 'id,title,content,documentId,chunkIndex',
+      filter
+    }
+
+    // Add semantic reranking with captions, answers, and query rewrites
+    if (useSemanticRanking) {
+      searchBody.queryType = 'semantic'
+      searchBody.semanticConfiguration = 'default'
+
+      // Query language is required for query rewrites
+      if (options?.queryLanguage) {
+        searchBody.queryLanguage = options.queryLanguage
+      }
+
+      // Add extractive captions (key passages with highlights)
+      if (options?.includeCaptions !== false) {
+        searchBody.captions = 'extractive|highlight-true'
+      }
+
+      // Add extractive answers (up to 3 by default)
+      if (options?.includeAnswers) {
+        searchBody.answers = 'extractive|count-3'
+      }
+
+      // Add generative query rewrites (generates alternative queries for better recall)
+      // This is similar to our manual query expansion in RAG Fusion, but uses Azure's LLM
+      if (options?.useQueryRewrites) {
+        searchBody.queryRewrites = 'generative|count-5'  // Generate 5 alternative queries
+      }
+    }
+
+    const response = await this.makeRequest(
+      `/indexes/${this.config.indexName}/docs/search`,
+      'POST',
+      searchBody,
+      { timeoutMs: options?.timeoutMs }
+    )
+
+    return response.value.map((result: any) => ({
+      id: result.id,
+      title: result.title,
+      content: result.content,
+      score: result['@search.score'],
+      highlights: result['@search.highlights']?.content,
+      documentId: result.documentId || result.id,
+      chunkIndex: result.chunkIndex,
+      rerankerScore: result['@search.rerankerScore'],  // L2 semantic reranking score
+      captions: result['@search.captions'],  // Extractive key passages
+      answers: result['@search.answers']  // Extractive answers with scores
     }))
   }
 

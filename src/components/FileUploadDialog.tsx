@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
@@ -125,6 +125,9 @@ export function FileUploadDialog({ open, onOpenChange, onUpload }: FileUploadDia
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-lg sm:text-xl">Upload Documents</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Drag and drop or select supported documents (PDF, Word, Markdown) to add them to your knowledge base.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4">

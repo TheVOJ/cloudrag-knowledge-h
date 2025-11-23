@@ -17,6 +17,9 @@ export type RetrievalResult = {
     chunkBased?: boolean
     totalChunks?: number
     uniqueDocuments?: number
+    fallbackReason?: string
+    retrievalBackend?: 'azure' | 'local'
+    cacheHit?: boolean
   }
 }
 
@@ -37,6 +40,9 @@ export class RetrievalExecutor {
   private azureService?: AzureSearchService
   private chunkManager: ChunkManager
   private knowledgeBaseId?: string
+  private chunkSearchCache = new Map<string, { timestamp: number; results: Array<{ chunk: DocumentChunk; score: number }> }>()
+  private chunkCacheTtlMs = 20000
+  private azureTimeoutMs = 5000
 
   constructor(
     azureEndpoint?: string,
@@ -96,39 +102,57 @@ export class RetrievalExecutor {
     documents: Document[],
     topK: number
   ): Promise<RetrievalResult> {
-    // Use chunk-based retrieval if knowledge base ID is available
-    if (this.knowledgeBaseId) {
-      return this.chunkBasedRetrieval(query, documents, 'semantic', topK)
-    }
-
+    // Azure vector search first when configured
+    let fallbackReason: string | undefined
     if (this.azureService) {
       try {
-        const results = await this.azureService.search(query, topK)
+        // Generate query embedding for vector search
+        const queryEmbedding = await generateEmbedding(query)
+
+        // Use Azure's native vector search with embeddings aligned to the configured dimension
+        const results = await this.azureService.vectorSearch(
+          queryEmbedding,
+          topK,
+          undefined,
+          { timeoutMs: this.azureTimeoutMs }
+        )
+
         const docMap = new Map(documents.map(d => [d.id, d]))
 
         const retrievedDocs = results
-          .map(r => docMap.get(r.id))
+          .map(r => docMap.get(r.id) || (r.documentId ? docMap.get(r.documentId) : undefined))
           .filter((d): d is Document => d !== undefined)
 
-        // Log warning if Azure returned results that couldn't be mapped to local documents
-        const unmappedCount = results.length - retrievedDocs.length
-        if (unmappedCount > 0) {
-          console.warn(`Azure returned ${unmappedCount} document(s) that couldn't be found in local documents. This may indicate a sync issue.`)
+        if (retrievedDocs.length > 0) {
+          return {
+            documents: retrievedDocs,
+            scores: results.slice(0, retrievedDocs.length).map(r => r.score),
+            method: 'semantic',
+            queryUsed: query,
+            metadata: { azureResults: results, retrievalBackend: 'azure' }
+          }
         }
-
-        return {
-          documents: retrievedDocs,
-          scores: results.slice(0, retrievedDocs.length).map(r => r.score),
-          method: 'semantic',
-          queryUsed: query,
-          metadata: { azureResults: results }
-        }
+        fallbackReason = 'Azure vector search returned no mapped documents'
+        console.warn('Azure vector search returned no mappable documents, falling back to chunks/local')
       } catch (error) {
-        console.error('Azure semantic search failed, falling back to simulated', error)
+        fallbackReason = error instanceof Error ? error.message : 'Azure vector search failed'
+        console.error('Azure vector search failed, falling back to local', error)
       }
     }
 
-    return this.simulatedSemanticSearch(query, documents, topK)
+    if (this.knowledgeBaseId) {
+      const fallback = await this.chunkBasedRetrieval(query, documents, 'semantic', topK)
+      return {
+        ...fallback,
+        metadata: { ...fallback.metadata, fallbackReason }
+      }
+    }
+
+    const simulated = await this.simulatedSemanticSearch(query, documents, topK)
+    return {
+      ...simulated,
+      metadata: { ...simulated.metadata, fallbackReason }
+    }
   }
 
   private async chunkBasedRetrieval(
@@ -137,13 +161,46 @@ export class RetrievalExecutor {
     strategy: RetrievalStrategy,
     topK: number
   ): Promise<RetrievalResult> {
+    if (!this.knowledgeBaseId) {
+      return this.simulatedSemanticSearch(query, documents, topK)
+    }
     // Generate query embedding for semantic search
     const queryEmbedding = strategy === 'semantic' ? await generateEmbedding(query) : null
 
-    // Search chunks based on strategy
-    const chunkResults = queryEmbedding
-      ? await this.chunkManager.searchChunksWithEmbedding(queryEmbedding, this.knowledgeBaseId!, topK * 3)
-      : await this.chunkManager.searchChunks(query, this.knowledgeBaseId!, topK * 3)
+    const cacheKey = `${this.knowledgeBaseId}:${strategy}:${query}:${topK}`
+    const cached = this.chunkSearchCache.get(cacheKey)
+    const now = Date.now()
+
+    let chunkResults: Array<{ chunk: DocumentChunk; score: number }> = []
+
+    if (cached && now - cached.timestamp < this.chunkCacheTtlMs) {
+      chunkResults = cached.results
+    } else {
+      if (queryEmbedding && runtime.vectorStore) {
+        try {
+          const matches = await runtime.vectorStore.query(queryEmbedding, topK * 3, { kbId: this.knowledgeBaseId })
+          const allChunks = await this.chunkManager.getChunksByKB(this.knowledgeBaseId)
+          const chunkMap = new Map(allChunks.map(c => [c.id, c]))
+          chunkResults = matches
+            .map(m => {
+              const chunk = chunkMap.get(m.id)
+              return chunk ? { chunk, score: m.score } : null
+            })
+            .filter((v): v is { chunk: DocumentChunk; score: number } => Boolean(v))
+        } catch (error) {
+          console.warn('Vector query failed; falling back to KV chunk search', error)
+        }
+      }
+
+      if (chunkResults.length === 0) {
+        // Fallback to KV-based search
+        chunkResults = queryEmbedding
+          ? await this.chunkManager.searchChunksWithEmbedding(queryEmbedding, this.knowledgeBaseId!, topK * 3)
+          : await this.chunkManager.searchChunks(query, this.knowledgeBaseId!, topK * 3)
+      }
+
+      this.chunkSearchCache.set(cacheKey, { timestamp: now, results: chunkResults })
+    }
 
     // Map chunks back to documents with context
     const documentMap = new Map<string, {
@@ -196,7 +253,9 @@ export class RetrievalExecutor {
       metadata: {
         chunkBased: true,
         totalChunks: chunkResults.length,
-        uniqueDocuments: documentMap.size
+        uniqueDocuments: documentMap.size,
+        retrievalBackend: 'local',
+        cacheHit: Boolean(cached)
       }
     }
   }
@@ -244,32 +303,64 @@ export class RetrievalExecutor {
     topK: number
   ): Promise<RetrievalResult> {
     if (this.azureService) {
+      let fallbackReason: string | undefined
       try {
-        const results = await this.azureService.search(query, topK, undefined, 'keyword')
+        const results = await this.azureService.search(query, topK, undefined, 'keyword', {
+          timeoutMs: this.azureTimeoutMs
+        })
         const docMap = new Map(documents.map(d => [d.id, d]))
 
         const retrievedDocs = results
-          .map(r => docMap.get(r.id))
+          .map(r => docMap.get(r.id) || (r.documentId ? docMap.get(r.documentId) : undefined))
           .filter((d): d is Document => d !== undefined)
 
-        // Log warning if Azure returned results that couldn't be mapped to local documents
         const unmappedCount = results.length - retrievedDocs.length
         if (unmappedCount > 0) {
           console.warn(`Azure returned ${unmappedCount} document(s) that couldn't be found in local documents. This may indicate a sync issue.`)
         }
 
-        return {
-          documents: retrievedDocs,
-          scores: results.slice(0, retrievedDocs.length).map(r => r.score),
-          method: 'keyword',
-          queryUsed: query,
-          metadata: { azureResults: results }
+        if (retrievedDocs.length > 0) {
+          return {
+            documents: retrievedDocs,
+            scores: results.slice(0, retrievedDocs.length).map(r => r.score),
+            method: 'keyword',
+            queryUsed: query,
+            metadata: { azureResults: results, retrievalBackend: 'azure' }
+          }
         }
+        fallbackReason = 'Azure keyword search returned no mapped documents'
+        console.warn('Azure keyword search returned no mappable documents, falling back to local search')
       } catch (error) {
+        fallbackReason = error instanceof Error ? error.message : 'Azure keyword search failed'
         console.error('Azure keyword search failed, falling back to simulated', error)
+      }
+      if (this.knowledgeBaseId) {
+        const fallback = await this.chunkBasedRetrieval(query, documents, 'keyword', topK)
+        return {
+          ...fallback,
+          metadata: { ...fallback.metadata, fallbackReason }
+        }
+      }
+
+      const simulatedFallback = await this.simulatedKeywordRetrieval(query, documents, topK)
+      return {
+        ...simulatedFallback,
+        metadata: { ...simulatedFallback.metadata, fallbackReason }
       }
     }
 
+    if (this.knowledgeBaseId) {
+      return this.chunkBasedRetrieval(query, documents, 'keyword', topK)
+    }
+
+    return this.simulatedKeywordRetrieval(query, documents, topK)
+  }
+
+  private async simulatedKeywordRetrieval(
+    query: string,
+    documents: Document[],
+    topK: number
+  ): Promise<RetrievalResult> {
     const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2)
 
     const scored = documents.map(doc => {
@@ -301,6 +392,47 @@ export class RetrievalExecutor {
     documents: Document[],
     topK: number
   ): Promise<RetrievalResult> {
+    // Azure hybrid search with semantic reranking first when configured
+    let fallbackReason: string | undefined
+    if (this.azureService) {
+      try {
+        // Generate query embedding for hybrid search
+        const queryEmbedding = await generateEmbedding(query)
+
+        // Use Azure's native hybrid search with vector + keyword + L2 semantic reranking
+        const results = await this.azureService.hybridSearch(
+          query,
+          queryEmbedding,
+          topK,
+          true,  // Enable semantic reranking
+          undefined,
+          { timeoutMs: this.azureTimeoutMs }
+        )
+
+        const docMap = new Map(documents.map(d => [d.id, d]))
+
+        const retrievedDocs = results
+          .map(r => docMap.get(r.id) || (r.documentId ? docMap.get(r.documentId) : undefined))
+          .filter((d): d is Document => d !== undefined)
+
+        if (retrievedDocs.length > 0) {
+          return {
+            documents: retrievedDocs,
+            scores: results.slice(0, retrievedDocs.length).map(r => r.rerankerScore || r.score),
+            method: 'hybrid',
+            queryUsed: query,
+            metadata: { azureResults: results, retrievalBackend: 'azure' }
+          }
+        }
+        fallbackReason = 'Azure hybrid search returned no mapped documents'
+        console.warn('Azure hybrid search returned no mappable documents, falling back to manual hybrid')
+      } catch (error) {
+        fallbackReason = error instanceof Error ? error.message : 'Azure hybrid search failed'
+        console.error('Azure hybrid search failed, falling back to manual hybrid', error)
+      }
+    }
+
+    // Fallback to manual hybrid retrieval (semantic + keyword fusion)
     const [semanticResult, keywordResult] = await Promise.all([
       this.semanticRetrieval(query, documents, topK * 2),
       this.keywordRetrieval(query, documents, topK * 2)
@@ -337,11 +469,19 @@ export class RetrievalExecutor {
     hybridScored.sort((a, b) => b.score - a.score)
     const topResults = hybridScored.slice(0, topK)
 
+    const combinedFallbackReason = fallbackReason || semanticResult.metadata?.fallbackReason || keywordResult.metadata?.fallbackReason
+    const chunkBased = semanticResult.metadata?.chunkBased || keywordResult.metadata?.chunkBased
+
     return {
       documents: topResults.map(r => r.doc),
       scores: topResults.map(r => r.score),
       method: 'hybrid',
-      queryUsed: query
+      queryUsed: query,
+      metadata: combinedFallbackReason || chunkBased ? {
+        fallbackReason: combinedFallbackReason,
+        chunkBased,
+        retrievalBackend: semanticResult.metadata?.retrievalBackend || keywordResult.metadata?.retrievalBackend || 'local'
+      } : undefined
     }
   }
 
@@ -433,7 +573,7 @@ Provide JSON array: ["variation 1", "variation 2", "variation 3"]
 Respond with ONLY valid JSON array.`
 
     try {
-      const result = await runtime.llm.generate(prompt, 'gpt-4o-mini', true)
+      const result = await runtime.llm.generate(prompt, '@cf/meta/llama-3.3-70b-instruct-fp8-fast', true)
       const parsed = JSON.parse(result)
       return Array.isArray(parsed) ? [query, ...parsed] : [query]
     } catch {

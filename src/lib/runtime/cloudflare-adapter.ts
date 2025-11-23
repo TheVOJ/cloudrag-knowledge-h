@@ -1,4 +1,5 @@
-import { RuntimeAdapter, LLMProvider, KeyValueStore } from './interfaces'
+import { RuntimeAdapter, LLMProvider, KeyValueStore, EmbeddingProvider, VectorStore } from './interfaces'
+import { DEFAULT_CF_EMBEDDING_MODEL, MAX_EMBEDDING_TEXT_LENGTH } from '../embedding-constants'
 
 /**
  * Cloudflare Workers Runtime Adapter
@@ -8,7 +9,7 @@ import { RuntimeAdapter, LLMProvider, KeyValueStore } from './interfaces'
 class CloudflareLLMProvider implements LLMProvider {
   constructor(private apiBase: string) {}
 
-  async generate(prompt: string, model: string = '@cf/meta/llama-3.1-8b-instruct', jsonMode: boolean = false): Promise<string> {
+  async generate(prompt: string, model: string = '@cf/meta/llama-3.3-70b-instruct-fp8-fast', jsonMode: boolean = false): Promise<string> {
     const response = await fetch(`${this.apiBase}/api/llm`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -23,7 +24,7 @@ class CloudflareLLMProvider implements LLMProvider {
     return data.response
   }
 
-  async *generateStream(prompt: string, model: string = '@cf/meta/llama-3.1-8b-instruct'): AsyncGenerator<string, void, unknown> {
+  async *generateStream(prompt: string, model: string = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'): AsyncGenerator<string, void, unknown> {
     const response = await fetch(`${this.apiBase}/api/llm/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -113,9 +114,81 @@ class CloudflareKeyValueStore implements KeyValueStore {
   }
 }
 
+class CloudflareEmbeddingProvider implements EmbeddingProvider {
+  constructor(private apiBase: string) {}
+
+  async embed(texts: string[]): Promise<number[][]> {
+    const response = await fetch(`${this.apiBase}/api/embed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        texts: texts.map(text => text.substring(0, MAX_EMBEDDING_TEXT_LENGTH)),
+        model: DEFAULT_CF_EMBEDDING_MODEL
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error(`Cloudflare AI embedding error: ${response.statusText}`)
+    }
+
+    const data = await response.json() as { embeddings: number[][] }
+    return data.embeddings
+  }
+}
+
+class CloudflareVectorStore implements VectorStore {
+  constructor(private apiBase: string) {}
+
+  async upsert(vectors: Array<{ id: string; values: number[]; metadata?: Record<string, any> }>): Promise<void> {
+    const response = await fetch(`${this.apiBase}/api/vector/upsert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vectors })
+    })
+
+    if (!response.ok) {
+      throw new Error(`Vector upsert failed: ${response.statusText}`)
+    }
+  }
+
+  async query(
+    vector: number[],
+    topK: number = 5,
+    filter?: Record<string, any>
+  ): Promise<Array<{ id: string; score: number; metadata?: Record<string, any> }>> {
+    const response = await fetch(`${this.apiBase}/api/vector/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vector, topK, filter })
+    })
+
+    if (!response.ok) {
+      throw new Error(`Vector query failed: ${response.statusText}`)
+    }
+
+    const data = await response.json() as { matches: Array<{ id: string; score: number; metadata?: Record<string, any> }> }
+    return data.matches || []
+  }
+
+  async delete(ids: string[]): Promise<void> {
+    if (ids.length === 0) return
+    const response = await fetch(`${this.apiBase}/api/vector/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    })
+
+    if (!response.ok) {
+      throw new Error(`Vector delete failed: ${response.statusText}`)
+    }
+  }
+}
+
 export class CloudflareRuntimeAdapter implements RuntimeAdapter {
   llm: LLMProvider
   kv: KeyValueStore
+  embedder?: EmbeddingProvider
+  vectorStore?: VectorStore
   name = 'cloudflare'
   version = '1.0.0'
   private apiBase: string
@@ -125,6 +198,8 @@ export class CloudflareRuntimeAdapter implements RuntimeAdapter {
     this.apiBase = apiBase || (typeof window !== 'undefined' ? window.location.origin : '')
     this.llm = new CloudflareLLMProvider(this.apiBase)
     this.kv = new CloudflareKeyValueStore(this.apiBase)
+    this.embedder = new CloudflareEmbeddingProvider(this.apiBase)
+    this.vectorStore = new CloudflareVectorStore(this.apiBase)
   }
 
   static isAvailable(): boolean {

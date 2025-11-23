@@ -46,6 +46,8 @@ type FlowBranch = {
 export function AgenticFlowDiagram({ response, compact = false }: AgenticFlowDiagramProps) {
   const [expandedStep, setExpandedStep] = useState<string | null>(null)
   const [showBranches, setShowBranches] = useState(true)
+  const safeDocs = Array.isArray(response.retrieval.documents) ? response.retrieval.documents : []
+  const safeSubQueries = Array.isArray(response.routing.subQueries) ? response.routing.subQueries : []
 
   const buildFlowSteps = (): FlowStep[] => {
     const steps: FlowStep[] = []
@@ -102,13 +104,13 @@ export function AgenticFlowDiagram({ response, compact = false }: AgenticFlowDia
         ]
       })
 
-      if (response.routing.strategy === 'multi_query' || response.routing.subQueries) {
+      if (response.routing.strategy === 'multi_query' || safeSubQueries.length > 0) {
         steps.push({
           id: 'expansion',
           label: 'Query Expansion',
           icon: <TreeStructure size={20} weight="duotone" />,
           status: 'completed',
-          detail: `Generated ${response.routing.subQueries?.length || 0} sub-queries`
+          detail: `Generated ${safeSubQueries.length} sub-queries`
         })
       }
 
@@ -118,7 +120,7 @@ export function AgenticFlowDiagram({ response, compact = false }: AgenticFlowDia
         label: usedAzure ? 'Azure AI Search' : 'Local Retrieval',
         icon: usedAzure ? <Lightning size={20} weight="fill" /> : <Database size={20} weight="duotone" />,
         status: 'completed',
-        detail: `Retrieved ${response.retrieval.documents.length} documents using ${usedAzure ? 'Azure AI Search' : 'local search'}`,
+        detail: `Retrieved ${safeDocs.length} documents using ${usedAzure ? 'Azure AI Search' : 'local search'}`,
         branches: response.routing.parallelizable ? [
           { condition: 'parallel execution', taken: true, destination: 'rerank' }
         ] : undefined
@@ -300,7 +302,7 @@ export function AgenticFlowDiagram({ response, compact = false }: AgenticFlowDia
                   </div>
 
                   <AnimatePresence>
-                    {expandedStep === step.id && step.branches && showBranches && (
+                    {expandedStep === step.id && Array.isArray(step.branches) && showBranches && (
                       <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}

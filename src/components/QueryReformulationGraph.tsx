@@ -51,6 +51,10 @@ export function QueryReformulationGraph({ data, onNodeClick }: QueryReformulatio
   const [zoomLevel, setZoomLevel] = useState(1)
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 })
 
+  // Normalize inputs to arrays to avoid runtime map errors
+  const nodesSafe = Array.isArray(data.nodes) ? data.nodes : []
+  const linksSafe = Array.isArray(data.links) ? data.links : []
+
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
@@ -68,7 +72,7 @@ export function QueryReformulationGraph({ data, onNodeClick }: QueryReformulatio
   }, [])
 
   useEffect(() => {
-    if (!svgRef.current || !data.nodes.length) return
+    if (!svgRef.current || !nodesSafe.length) return
 
     const width = dimensions.width
     const height = dimensions.height
@@ -91,8 +95,8 @@ export function QueryReformulationGraph({ data, onNodeClick }: QueryReformulatio
 
     svg.call(zoom)
 
-    const nodes: D3Node[] = data.nodes.map(d => ({ ...d }))
-    const links: D3Link[] = data.links.map(d => ({ 
+    const nodes: D3Node[] = nodesSafe.map(d => ({ ...d }))
+    const links: D3Link[] = linksSafe.map(d => ({ 
       ...d,
       source: d.source,
       target: d.target
@@ -485,22 +489,22 @@ export function QueryReformulationGraph({ data, onNodeClick }: QueryReformulatio
             </Card>
           )}
 
-          {data.nodes.length > 0 && (
+          {nodesSafe.length > 0 && (
             <Card className="p-3 bg-muted/50">
               <h4 className="text-xs font-semibold mb-2">Graph Stats</h4>
               <div className="space-y-1 text-xs text-muted-foreground">
                 <div className="flex justify-between">
                   <span>Total Nodes:</span>
-                  <span className="font-medium">{data.nodes.length}</span>
+                  <span className="font-medium">{nodesSafe.length}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Total Links:</span>
-                  <span className="font-medium">{data.links.length}</span>
+                  <span className="font-medium">{linksSafe.length}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Iterations:</span>
                   <span className="font-medium">
-                    {Math.max(...data.nodes.map(n => n.iteration || 0))}
+                    {nodesSafe.length ? Math.max(...nodesSafe.map(n => n.iteration || 0)) : 0}
                   </span>
                 </div>
               </div>

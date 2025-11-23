@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,6 +29,9 @@ export function CreateKnowledgeBaseDialog({ open, onOpenChange, onCreate }: Crea
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-lg sm:text-xl">Create Knowledge Base</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Name your knowledge base and give it a short description so others know what it contains.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-3 sm:space-y-4 py-3 sm:py-4">

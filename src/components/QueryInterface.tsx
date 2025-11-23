@@ -9,16 +9,31 @@ import { motion } from 'framer-motion'
 import { AzureSearchService, SearchResult } from '@/lib/azure-search'
 import { AzureSearchSettings } from '@/lib/types'
 import { runtime } from '@/lib/runtime/manager'
+import { UnifiedQueryRecord } from '@/lib/unified-query-model'
 
 interface QueryInterfaceProps {
+  knowledgeBaseId: string
   knowledgeBaseName: string
   documents: Array<{ id: string; title: string; content: string }>
-  onQuery: (query: string, response: string, sources: string[], searchMethod: 'simulated' | 'azure') => void
+  onQuery: (
+    query: string,
+    response: string,
+    sources: string[],
+    searchMethod: 'simulated' | 'azure',
+    analyticsMetadata?: Partial<UnifiedQueryRecord>
+  ) => Promise<void> | void
   azureSettings?: AzureSearchSettings
   indexName?: string
 }
 
-export function QueryInterface({ knowledgeBaseName, documents, onQuery, azureSettings, indexName }: QueryInterfaceProps) {
+export function QueryInterface({
+  knowledgeBaseId,
+  knowledgeBaseName,
+  documents,
+  onQuery,
+  azureSettings,
+  indexName
+}: QueryInterfaceProps) {
   const [query, setQuery] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [response, setResponse] = useState('')
@@ -50,13 +65,14 @@ export function QueryInterface({ knowledgeBaseName, documents, onQuery, azureSet
   
   const handleAzureSearch = async () => {
     if (!isAzureEnabled || !query.trim()) return
-    
+
     setIsLoading(true)
     setResponse('')
     setSources([])
     setDisplayedText('')
     setSearchResults([])
-    
+    const startedAt = Date.now()
+
     try {
       const service = new AzureSearchService({
         endpoint: azureSettings.endpoint,
@@ -82,10 +98,18 @@ User Question: ${query}
 
 Provide a helpful answer based on the context above. If the context doesn't contain relevant information, say so.`
       
-      const aiResponse = await runtime.llm.generate(prompt, 'gpt-4o-mini')
+      const aiResponse = await runtime.llm.generate(prompt, '@cf/meta/llama-3.3-70b-instruct-fp8-fast')
       setResponse(aiResponse)
       setSources(results.map((r) => r.title))
-      onQuery(query, aiResponse, results.map((r) => r.title), 'azure')
+      onQuery(query, aiResponse, results.map((r) => r.title), 'azure', {
+        knowledgeBaseId,
+        timeMs: Date.now() - startedAt,
+        documentsRetrieved: results.length,
+        retrievalBackend: 'azure',
+        retrievalMethod: 'semantic',
+        confidence: results[0]?.score,
+        sources: results.map(r => r.title)
+      })
     } catch (error) {
       setResponse('Error with Azure Search: ' + (error instanceof Error ? error.message : 'Unknown error'))
       setSources([])
@@ -96,13 +120,14 @@ Provide a helpful answer based on the context above. If the context doesn't cont
   
   const handleSimulatedSearch = async () => {
     if (!query.trim()) return
-    
+
     setIsLoading(true)
     setResponse('')
     setSources([])
     setDisplayedText('')
     setSearchResults([])
-    
+    const startedAt = Date.now()
+
     await new Promise(resolve => setTimeout(resolve, 800))
     
     const relevantDocs = documents.slice(0, 3)
@@ -120,10 +145,18 @@ User Question: ${query}
 Provide a helpful answer based on the context above. If the context doesn't contain relevant information, say so.`
     
     try {
-      const aiResponse = await runtime.llm.generate(prompt, 'gpt-4o-mini')
+      const aiResponse = await runtime.llm.generate(prompt, '@cf/meta/llama-3.3-70b-instruct-fp8-fast')
       setResponse(aiResponse)
       setSources(relevantDocs.map(doc => doc.title))
-      onQuery(query, aiResponse, relevantDocs.map(doc => doc.title), 'simulated')
+      onQuery(query, aiResponse, relevantDocs.map(doc => doc.title), 'simulated', {
+        knowledgeBaseId,
+        timeMs: Date.now() - startedAt,
+        documentsRetrieved: relevantDocs.length,
+        retrievalBackend: 'local',
+        retrievalMethod: 'simulated',
+        confidence: 0.5,
+        sources: relevantDocs.map(doc => doc.title)
+      })
     } catch (error) {
       setResponse('Sorry, I encountered an error while processing your query. Please try again.')
       setSources([])

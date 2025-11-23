@@ -93,7 +93,7 @@ Provide JSON: {"token": "...", "confidence": 0.0-1.0, "reasoning": "brief explan
 Respond with ONLY valid JSON.`
 
     try {
-      const result = await runtime.llm.generate(prompt, 'gpt-4o', true)
+      const result = await runtime.llm.generate(prompt, '@cf/meta/llama-3.3-70b-instruct-fp8-fast', true)
       const evaluation = JSON.parse(result)
       
       return {
@@ -129,7 +129,7 @@ Provide JSON: {"token": "...", "confidence": 0.0-1.0, "reasoning": "brief explan
 Respond with ONLY valid JSON.`
 
     try {
-      const result = await runtime.llm.generate(prompt, 'gpt-4o-mini', true)
+      const result = await runtime.llm.generate(prompt, '@cf/meta/llama-3.3-70b-instruct-fp8-fast', true)
       const evaluation = JSON.parse(result)
       
       return {
@@ -226,7 +226,7 @@ Provide JSON:
 Respond with ONLY valid JSON.`
 
     try {
-      const result = await runtime.llm.generate(prompt, 'gpt-4o', true)
+      const result = await runtime.llm.generate(prompt, '@cf/meta/llama-3.3-70b-instruct-fp8-fast', true)
       const feedback = JSON.parse(result)
       
       return {
